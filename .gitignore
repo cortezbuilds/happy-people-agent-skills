@@ -1,0 +1,7 @@
+# User-specific sinks and control-plane adapters must never enter the portable package.
+local/
+**/local/
+
+# Common editor and operating-system artifacts.
+.DS_Store
+*~

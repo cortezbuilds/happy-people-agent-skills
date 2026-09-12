@@ -1,0 +1,4 @@
+interface:
+  display_name: "Privacy Exposure Scout"
+  short_description: "Notice and log unintended privacy exposure safely"
+  default_prompt: "Notice concrete unintended identity or privacy exposure during ordinary work, record it with minimal disclosure, and recommend the smallest proportionate next action."

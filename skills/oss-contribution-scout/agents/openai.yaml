@@ -1,0 +1,4 @@
+interface:
+  display_name: "OSS Contribution Scout"
+  short_description: "Turn verified technical lessons into safe upstream contributions"
+  default_prompt: "Identify and prepare evidence-backed OSS contribution opportunities from this work while preserving explicit approval gates."

@@ -1,0 +1,55 @@
+--- a/hw-probe
++++ b/hw-probe
+@@ -2050,6 +2050,9 @@
+     my $Content = $_[0];
+     
+     my %DiskSer = ();
++    while($Content=~/((\/|^)nvme-[^\s]*_)([^_\s]+)(_\d+)(\-part|[\s\n,])/mg) {
++        $DiskSer{$3} = 1;
++    }
+     while($Content=~/((\/|^)(ata|nvme|scsi)-[^\s]*_)(.+?)(\-part|[\s\n,])/mg) {
+         $DiskSer{$4} = 1;
+     }
+@@ -2062,7 +2065,7 @@
+             next;
+         }
+         
+-        $Content=~s/_\Q$Ser\E\b/_$Enc/g; # /dev/disk/by-id/ata-Samsung_SSD_850_EVO_250GB_XXXXXXXXXXXXXXX
++        $Content=~s/_\Q$Ser\E(?=\b|_)/_$Enc/g; # ata MODEL_SERIAL and nvme MODEL_SERIAL_NSID
+     }
+     
+     return $Content;
+@@ -2119,7 +2122,7 @@
+         $Content=~s/(\Q$Tag\E\s*[:=]\s*"?)\Q$Ser\E("?\s*\n)/$1$Enc$2/g;
+         
+         if($Name and $Name eq "hwinfo") {
+-            $Content=~s/_\Q$Ser\E\b/_$Enc/g; # /dev/disk/by-id/ata-Samsung_SSD_850_EVO_250GB_XXXXXXXXXXXXXXX
++            $Content=~s/_\Q$Ser\E(?=\b|_)/_$Enc/g; # ata MODEL_SERIAL and nvme MODEL_SERIAL_NSID
+         }
+     }
+     return $Content;
+@@ -2180,10 +2183,14 @@
+     while($Content=~/\/wwn-0x(.+?)\W/g) {
+         $WWNs{$1} = 1;
+     }
++    while($Content=~/\/nvme-eui\.([a-f\d]+)(?:\-part|[\s\n,])/ig) {
++        $WWNs{$1} = 1;
++    }
+     foreach my $WWN (sort keys(%WWNs))
+     {
+         my $Enc = clientHash($WWN);
+         $Content=~s/(wwn-0x)\Q$WWN\E/$1$Enc/g; # wwn-0xXXXXXXXXXXXXXXXX
++        $Content=~s/(nvme-eui\.)\Q$WWN\E/$1$Enc/gi;
+     }
+     return $Content;
+ }
+@@ -15955,6 +15962,9 @@
+         {
+             listProbe("logs", "boot_efi");
+             my $BootEfi = runCmd("find /boot/efi 2>/dev/null | sort");
++            $BootEfi = hideByRegexp($BootEfi, qr/\/boot\/efi\/([a-f\d]{32})(?:\/|\n|\Z)/);
++            $BootEfi=~s/(Recovery\-)[a-f\d]+\-[a-f\d]+/$1.../gi;
++            $BootEfi = encryptUUIDs($BootEfi);
+             writeLog($LOG_DIR."/boot_efi", $BootEfi);
+         }
+     }
