@@ -4,10 +4,11 @@ Small, optional skills shared as source-available software for community use. Th
 
 ## Included skills
 
+- **Intent Stewardship** — preserves the user's outcome, constraints, authority, and acceptance criteria while work is delegated across agents, tools, and repositories.
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
 
-Both skills are portable Markdown packages. Neither depends on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
+The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
 ## Design rules
 
@@ -19,9 +20,9 @@ Both skills are portable Markdown packages. Neither depends on Notion, a hosted 
 
 ## Install locally
 
-Copy either folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
+Copy the desired folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
 
-The development machine already has both skills installed and validated; this repository is the publication-ready source package.
+The development machine already has the published skills installed and validated; this repository is the publication-ready source package.
 
 ## License and safety
 
@@ -29,7 +30,7 @@ The project uses the [PolyForm Noncommercial License 1.0.0](LICENSE.md). You can
 
 That balance is intentional: community use is welcome, while a small independent builder keeps the option to license or develop the work commercially later.
 
-Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and create substantial privacy, account, data, reputational, and financial risk when granted broad authority or allowed to run without limits. The project comes without warranty or liability to the maximum extent the law permits.
+Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and create substantial privacy, account, data, reputational, and financial risk when granted broad authority or allowed to run without limits. The project comes without warranty or liability to the maximum extent permitted by law.
 
 ## Case study 001
 
@@ -37,4 +38,4 @@ Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and
 
 ## Publication status
 
-This is a public beta. Both included skills have been privacy-checked, installed locally, and validated. Feedback and focused contributions are welcome through this repository's issues and pull requests.
+This is a public beta. The included skills have been privacy-checked and validated before release. Feedback and focused contributions are welcome through this repository's issues and pull requests.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Intent Stewardship"
+  short_description: "Preserve user intent across delegated work"
+  default_prompt: "Use $intent-stewardship to preserve the user's outcome, constraints, authority, and acceptance checks while coordinating this work."
