@@ -1,0 +1,4 @@
+interface:
+  display_name: "Out Tonight"
+  short_description: "Private SoundCloud-matched Berlin night plans"
+  default_prompt: "Use $out-tonight to find a verified Berlin event for tonight and ask before using SoundCloud personalization or creating a playlist."

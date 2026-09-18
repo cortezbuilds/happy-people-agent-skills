@@ -6,8 +6,9 @@ Small, optional skills shared as source-available software for community use. Th
 
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
+- **Out Tonight** — coordinates live Berlin event discovery with private, SoundCloud-native taste matching, then creates a private playlist only after a separate confirmation.
 
-Both skills are portable Markdown packages. Neither depends on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
+The skills are portable Markdown packages. They do not depend on Notion or a hosted ledger. Provider-backed skills declare their required MCP connections and keep provider credentials and private source data outside the model conversation.
 
 ## Design rules
 
@@ -19,9 +20,9 @@ Both skills are portable Markdown packages. Neither depends on Notion, a hosted 
 
 ## Install locally
 
-Copy either folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
+Copy the desired folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
 
-The development machine already has both skills installed and validated; this repository is the publication-ready source package.
+Skills should be locally installed and validated before release; this repository is the source package.
 
 ## License and safety
 
@@ -37,4 +38,4 @@ Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and
 
 ## Publication status
 
-This is a public beta. Both included skills have been privacy-checked, installed locally, and validated. Feedback and focused contributions are welcome through this repository's issues and pull requests.
+This is a public beta. Included skills are privacy-checked and validated before release. Feedback and focused contributions are welcome through this repository's issues and pull requests.
