@@ -6,18 +6,8 @@ Small, optional skills shared as source-available software for community use. Th
 
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
-- **Intent Stewardship** — preserves the user's outcome, hard constraints, authority, and acceptance criteria when work is split across agents, tools, documents, repositories, or parallel work packets.
 
-All skills are portable Markdown packages. None depends on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
-
-## Skill classes
-
-The `classes/` directory provides lightweight indexes without changing install paths:
-
-- **[Scouting](classes/scouting/README.md)** — bounded side-work discovered during another task.
-- **[Agent coordination](classes/agent-coordination/README.md)** — preserves intent and authority across delegated or parallel work.
-
-Class folders are taxonomy only. Installable skill packages remain direct folders beneath `skills/`.
+Both skills are portable Markdown packages. Neither depends on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
 ## Design rules
 
@@ -31,7 +21,7 @@ Class folders are taxonomy only. Installable skill packages remain direct folder
 
 Copy either folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
 
-The previously published skills have been installed and validated on the development machine. New or modified skills should be reviewed and validated locally before release; this repository remains the publication-ready source package.
+The development machine already has both skills installed and validated; this repository is the publication-ready source package.
 
 ## License and safety
 
@@ -47,4 +37,4 @@ Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and
 
 ## Publication status
 
-This is a public beta. Published skills should be privacy-checked and locally validated before release. Feedback and focused contributions are welcome through this repository's issues and pull requests.
+This is a public beta. Both included skills have been privacy-checked, installed locally, and validated. Feedback and focused contributions are welcome through this repository's issues and pull requests.
