@@ -37,6 +37,4 @@ Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and
 
 ## Publication status
 
-Beta source is complete, privacy-checked, and locally committed with Cortez's verified GitHub no-reply identity for eventual publication at `cortezbuilds/happy-people-agent-skills`.
-
-Public GitHub publication remains paused for one reason: human approval of the exact local project before repository creation and push.
+This is a public beta. Both included skills have been privacy-checked, installed locally, and validated. Feedback and focused contributions are welcome through this repository's issues and pull requests.

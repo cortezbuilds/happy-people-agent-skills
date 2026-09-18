@@ -6,4 +6,4 @@
 - [x] Amend the local-only placeholder commit identity before pushing.
 - [x] Confirm no `local/` adapter, Notion URL, personal email, host identifier, device identifier, or raw diagnostic archive is tracked.
 - [x] Review every case-study value as synthetic, aggregate, hashed, or redacted.
-- [ ] Human-review the exact local project before repository creation and push.
+- [x] Human-review the exact local project before repository creation and push.
