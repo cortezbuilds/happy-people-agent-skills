@@ -2,3 +2,16 @@ interface:
   display_name: "Out Tonight"
   short_description: "Private SoundCloud-matched Berlin night plans"
   default_prompt: "Use $out-tonight to find a verified Berlin event for tonight and ask before using SoundCloud personalization or creating a playlist."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "ra-mcp-cloudflare"
+      description: "Stateless current-night Berlin event facts from the cortezbuilds RA MCP"
+      transport: "streamable_http"
+      url: "https://ra-mcp-cloudflare.daniel-cortez-stevenson.workers.dev/mcp"
+    - type: "mcp"
+      value: "soundcloud-mcp"
+      description: "SoundCloud OAuth, provider-side taste matching, and confirmed private-playlist creation"
+      transport: "streamable_http"
+      url: "https://soundcloud-mcp.daniel-cortez-stevenson.workers.dev/mcp"
