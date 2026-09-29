@@ -24,6 +24,8 @@ PLAN_SCHEMA = "agent-schematic/plan-v1"
 WARNINGS_SCHEMA = "agent-schematic/warnings-v1"
 SVG_SCHEMA = "agent-schematic/svg-v1"
 COMPILER_NAME = "agent-schematic/compile_bundle.py"
+MAX_JSON_BYTES = 1_000_000
+MAX_OUTCOMES = 16
 IDENT = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"pure", "model", "external_read", "external_write", "irreversible"}
@@ -47,7 +49,7 @@ def require(condition: bool, message: str) -> None:
 def reject_duplicates(pairs):
     value = {}
     for key, item in pairs:
-        require(key not in value, f"duplicate JSON key: {key}")
+        require(key not in value, f"duplicate JSON key: {key!r}")
         value[key] = item
     return value
 
@@ -56,7 +58,10 @@ def load_json(path: Path):
     def reject_constant(value):
         raise BundleError(f"non-JSON numeric value: {value}")
 
-    raw = path.read_bytes()
+    with path.open("rb") as source:
+        raw = source.read(MAX_JSON_BYTES + 1)
+    require(len(raw) <= MAX_JSON_BYTES,
+            f"{path}: JSON input exceeds {MAX_JSON_BYTES} bytes")
     try:
         data = json.loads(raw, object_pairs_hook=reject_duplicates,
                           parse_constant=reject_constant)
@@ -64,6 +69,7 @@ def load_json(path: Path):
         raise BundleError(f"invalid JSON in {path}: {exc}") from exc
     require(isinstance(data, dict), f"{path}: top-level JSON must be an object")
     reject_nonfinite(data)
+    reject_surrogates(data)
     return data, hashlib.sha256(raw).hexdigest()
 
 
@@ -76,6 +82,19 @@ def reject_nonfinite(value):
     elif isinstance(value, list):
         for item in value:
             reject_nonfinite(item)
+
+
+def reject_surrogates(value):
+    if isinstance(value, str):
+        require(not any(0xD800 <= ord(char) <= 0xDFFF for char in value),
+                "JSON string contains a non-Unicode-scalar surrogate")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            reject_surrogates(key)
+            reject_surrogates(item)
+    elif isinstance(value, list):
+        for item in value:
+            reject_surrogates(item)
 
 
 def scalar(value):
@@ -132,6 +151,7 @@ def extract_fact(spec: dict, raw: bytes, source_label: str):
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BundleError(f"json_path source is invalid JSON: {source_label}") from exc
         reject_nonfinite(value)
+        reject_surrogates(value)
         for key in path:
             require(isinstance(value, dict) and key in value,
                     f"json_path key {key!r} absent in {source_label}")
@@ -256,8 +276,8 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
         require(isinstance(refs, list) and all(ref in evidence for ref in refs),
                 f"{step_id}: unknown evidence reference")
         outcomes = step.get("outcomes", [])
-        require(isinstance(outcomes, list) and outcomes,
-                f"{step_id}: declare at least one possible outcome")
+        require(isinstance(outcomes, list) and 1 <= len(outcomes) <= MAX_OUTCOMES,
+                f"{step_id}: declare 1 to {MAX_OUTCOMES} possible outcomes")
         outcome_ids = set()
         for outcome in outcomes:
             require(isinstance(outcome, dict) and valid_id(outcome.get("id")) and
@@ -378,62 +398,78 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
     first_truncated_step = None
     for step in contract["steps"]:
         produced = []
+        produced_count = 0
+        current_unknown_candidate = None
+        historical_unknown_candidate = None
         step_id = step["id"]
+
+        def offer(path: dict, status: str, outcome: dict | None = None,
+                  condition: dict | None = None) -> None:
+            nonlocal produced_count, current_unknown_candidate, historical_unknown_candidate
+            produced_count += 1
+            in_prefix = len(produced) < max_paths
+            current_unknown = status in UNKNOWN_STATUSES
+            prior_unknown = has_unknown_branch(path)
+            if not (in_prefix or
+                    (current_unknown and current_unknown_candidate is None) or
+                    (prior_unknown and historical_unknown_candidate is None)):
+                return
+            outcome_id = outcome["id"] if outcome is not None else None
+            branch = append_result(path, step_id, status, outcome_id)
+            if condition is not None:
+                branch["conditions"].append(condition)
+            if outcome is not None:
+                for key, value in outcome.get("set", {}).items():
+                    branch["facts"][key] = {"value": value, "origin": "inferred",
+                                            "via_step": step_id,
+                                            "via_outcome": outcome_id}
+            if in_prefix:
+                produced.append(branch)
+            else:
+                if current_unknown and current_unknown_candidate is None:
+                    current_unknown_candidate = branch
+                if has_unknown_branch(branch) and historical_unknown_candidate is None:
+                    historical_unknown_candidate = branch
+
         for path in paths:
             outcomes_by_step = {item["step_id"]: item["forecast_status"]
                                 for item in path["step_results"]}
             if any(outcomes_by_step.get(dep) != "success" for dep in step.get("depends_on", [])):
-                produced.append(append_result(path, step_id, "skipped_dependency"))
+                offer(path, "skipped_dependency")
                 continue
             match, unknown = guard_result(step.get("guard", []), path["facts"])
             if match is False:
-                produced.append(append_result(path, step_id, "skipped_guard_false"))
+                offer(path, "skipped_guard_false")
                 continue
-            candidates = []
+            true_condition = None
             if match is None:
-                skipped = append_result(path, step_id, "skipped_guard_unknown")
-                skipped["conditions"].append({"guard_step": step_id, "assumed": False,
-                                              "unknown_facts": unknown})
-                produced.append(skipped)
-                true_case = copy.deepcopy(path)
-                true_case["conditions"].append({"guard_step": step_id, "assumed": True,
-                                                "unknown_facts": unknown})
-                candidates.append(true_case)
-            else:
-                candidates.append(path)
-
-            for candidate in candidates:
-                if step["kind"] in WRITE_KINDS:
-                    status = ("blocked_external_effect" if gates[step_id]["status"] == "blocked"
-                              else "conditional_external_effect")
-                    produced.append(append_result(candidate, step_id, status))
-                    continue
-                for outcome in step["outcomes"]:
-                    branch = append_result(candidate, step_id, outcome["result"], outcome["id"])
-                    for key, value in outcome.get("set", {}).items():
-                        branch["facts"][key] = {"value": value, "origin": "inferred",
-                                                "via_step": step_id,
-                                                "via_outcome": outcome["id"]}
-                    produced.append(branch)
-                if step["kind"] in OPEN_OUTCOME_KINDS:
-                    produced.append(append_result(candidate, step_id, "unmodeled_outcome"))
-        if len(produced) > max_paths:
-            omitted_lower_bound += len(produced) - max_paths
+                offer(path, "skipped_guard_unknown",
+                      condition={"guard_step": step_id, "assumed": False,
+                                 "unknown_facts": unknown})
+                true_condition = {"guard_step": step_id, "assumed": True,
+                                  "unknown_facts": unknown}
+            if step["kind"] in WRITE_KINDS:
+                status = ("blocked_external_effect" if gates[step_id]["status"] == "blocked"
+                          else "conditional_external_effect")
+                offer(path, status, condition=true_condition)
+                continue
+            for outcome in step["outcomes"]:
+                offer(path, outcome["result"], outcome=outcome,
+                      condition=true_condition)
+            if step["kind"] in OPEN_OUTCOME_KINDS:
+                offer(path, "unmodeled_outcome", condition=true_condition)
+        if produced_count > max_paths:
+            omitted_lower_bound += produced_count - max_paths
             if first_truncated_step is None:
                 first_truncated_step = step_id
             truncated = True
-            retained = produced[:max_paths]
-            omitted = produced[max_paths:]
             representative = None
-            if not any(has_current_unknown_branch(path) for path in retained):
-                representative = next((path for path in omitted
-                                       if has_current_unknown_branch(path)), None)
-            if representative is None and not any(has_unknown_branch(path) for path in retained):
-                representative = next((path for path in omitted
-                                       if has_unknown_branch(path)), None)
+            if not any(has_current_unknown_branch(path) for path in produced):
+                representative = current_unknown_candidate
+            if representative is None and not any(has_unknown_branch(path) for path in produced):
+                representative = historical_unknown_candidate
             if representative is not None:
-                retained[-1] = representative
-            produced = retained
+                produced[-1] = representative
         paths = produced
     for index, path in enumerate(paths, start=1):
         path["path_id"] = f"p{index:03d}"
@@ -665,10 +701,9 @@ def compile_bundle(contract_path: Path, start_path: Path, max_paths: int = 32,
     return plan, report, svg
 
 
-def write_json(path: Path, value):
-    path.write_text(json.dumps(value, sort_keys=True, indent=2,
-                               ensure_ascii=False, allow_nan=False) + "\n",
-                    encoding="utf-8")
+def json_bytes(value) -> bytes:
+    return (json.dumps(value, sort_keys=True, indent=2,
+                       ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
 
 
 def render_warnings_md(report: dict):
@@ -694,17 +729,18 @@ def main():
     try:
         plan, report, svg = compile_bundle(args.contract, args.start, args.max_paths,
                                            args.workspace_root)
+        encoded = {"plan.json": json_bytes(plan),
+                   "warnings.json": json_bytes(report),
+                   "warnings.md": render_warnings_md(report).encode("utf-8")}
+        if svg is not None:
+            encoded["diagram.svg"] = svg.encode("utf-8")
         args.out.mkdir(parents=True, exist_ok=True)
-        write_json(args.out / "plan.json", plan)
-        write_json(args.out / "warnings.json", report)
-        (args.out / "warnings.md").write_text(render_warnings_md(report),
-                                               encoding="utf-8")
+        for name, raw in encoded.items():
+            (args.out / name).write_bytes(raw)
         svg_path = args.out / "diagram.svg"
         if svg is None:
             svg_path.unlink(missing_ok=True)
-        else:
-            svg_path.write_text(svg, encoding="utf-8")
-    except (BundleError, OSError) as exc:
+    except (BundleError, OSError, UnicodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     print(f"Compiled {plan['id']}: {len(plan['predicted_paths'])} retained path(s); "

@@ -55,11 +55,13 @@ explicit `--workspace-root` argument, and paths must stay within that root.
 
 `pure` steps have one declared success outcome. `model` and `external_read`
 steps always add an `unmodeled_outcome` branch. Unknown guards branch into
-explicit true and false assumptions. Path expansion defaults to 32 and can be
-set with `--max-paths` from 1 to 128; omitted branches set
+explicit true and false assumptions. Contract and start JSON files are limited
+to 1 MB each, and each step can declare at most 16 outcomes. Path expansion
+defaults to 32 and can be set with `--max-paths` from 1 to 128; omitted branches set
 `path_coverage.outcome_space_incomplete` and produce a stable warning ID.
 When capped, the retained paths include a representative unknown branch if
-one was produced; they do not cover every omitted alternative.
+one was produced; they do not cover every omitted alternative. The compiler
+counts omitted candidates without copying their full path state.
 An unmodeled model or external-read step upstream of a write adds a
 `UNMODELED_OUTCOME_FEEDS_EFFECT` warning based on declared dependency reachability;
 it does not assert that a runtime path will take that branch.

@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 import compile_bundle as compiler
 
@@ -128,6 +129,66 @@ class CompilerTests(unittest.TestCase):
             path.write_text('{"schema":"agent-schematic/contract-v1","x":1e999}',
                             encoding="utf-8")
             with self.assertRaisesRegex(compiler.BundleError, "non-finite JSON number"):
+                compiler.load_json(path)
+
+    def test_lone_surrogates_fail_before_any_artifact_is_written(self):
+        contract = json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8"))
+        contract["objective"] = "bad\ud800value"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "contract.json"
+            output = root / "output"
+            output.mkdir()
+            existing_plan = output / "plan.json"
+            existing_plan.write_bytes(b"previous valid plan\n")
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            result = subprocess.run([sys.executable, str(HERE / "compile_bundle.py"),
+                                     str(path), str(SIMPLE_START), "--out", str(output)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("ERROR: JSON string contains a non-Unicode-scalar surrogate",
+                          result.stderr)
+            self.assertEqual(existing_plan.read_bytes(), b"previous valid plan\n")
+            self.assertFalse((output / "warnings.json").exists())
+
+            contract["objective"] = "ordinary"
+            contract["surrogate\ud800key"] = True
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            with self.assertRaisesRegex(compiler.BundleError, "non-Unicode-scalar surrogate"):
+                compiler.load_json(path)
+
+            contract.pop("surrogate\ud800key")
+            contract["objective"] = "valid emoji \U0001f600"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+            self.assertEqual(plan["objective"], "valid emoji \U0001f600")
+
+    def test_json_inputs_and_outcomes_are_bounded_before_path_expansion(self):
+        contract = json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8"))
+        contract["steps"][0]["kind"] = "model"
+        contract["steps"][0]["outcomes"] = [
+            {"id": f"result_{index}", "result": "success"}
+            for index in range(compiler.MAX_OUTCOMES)]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            with mock.patch.object(compiler, "append_result",
+                                   wraps=compiler.append_result) as append:
+                plan, _, _ = compiler.compile_bundle(path, SIMPLE_START, max_paths=1)
+            self.assertEqual(append.call_count, 2)
+            self.assertEqual(plan["predicted_paths"][0]["step_results"][-1]
+                             ["forecast_status"], "unmodeled_outcome")
+            self.assertEqual(plan["enumeration"]["omitted_branches_at_least"],
+                             compiler.MAX_OUTCOMES)
+
+            contract["steps"][0]["outcomes"].append(
+                {"id": "overflow", "result": "success"})
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            with self.assertRaisesRegex(compiler.BundleError, "declare 1 to 16 possible outcomes"):
+                compiler.compile_bundle(path, SIMPLE_START, max_paths=1)
+
+            path.write_bytes(b" " * (compiler.MAX_JSON_BYTES + 1))
+            with self.assertRaisesRegex(compiler.BundleError, "JSON input exceeds"):
                 compiler.load_json(path)
 
     def test_path_cap_is_explicitly_incomplete(self):
