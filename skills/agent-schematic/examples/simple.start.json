@@ -1,0 +1,18 @@
+{
+  "schema": "agent-schematic/start-v1",
+  "evidence": {
+    "note": {
+      "root": "bundle",
+      "path": "evidence/simple_note.txt",
+      "sha256": "bd560e1dab151ae1e752c499a407c35a47391fd3435d49dd155ed794a903e080"
+    }
+  },
+  "facts": {
+    "note_present": {
+      "value": true,
+      "evidence_refs": ["note"],
+      "extract": {"kind": "text_contains", "evidence_ref": "note", "text": "Synthetic note:"}
+    }
+  },
+  "approvals": []
+}

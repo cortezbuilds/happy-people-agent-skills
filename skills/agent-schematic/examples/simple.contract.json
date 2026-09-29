@@ -1,0 +1,19 @@
+{
+  "schema": "agent-schematic/contract-v1",
+  "id": "synthetic_simple_note",
+  "title": "Check a synthetic local note",
+  "objective": "Confirm a pinned local note is available for prose review.",
+  "steps": [
+    {
+      "id": "check_note",
+      "label": "Confirm the pinned note is present",
+      "kind": "pure",
+      "depends_on": [],
+      "guard": [{"fact": "note_present", "equals": true}],
+      "evidence_refs": ["note"],
+      "outcomes": [
+        {"id": "available", "result": "success", "set": {"note_available_for_review": true}}
+      ]
+    }
+  ]
+}

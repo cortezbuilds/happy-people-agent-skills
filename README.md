@@ -8,12 +8,13 @@ Small, optional skills shared as source-available software for community use. Th
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
 - **Release Evidence** — checks whether a visual explains verified behavior and can stay current, then distinguishes locally prepared work from files visible on public `main` and content observed in production.
+- **Agent Schematic** — compiles a small declared workflow and pinned local files into possible states and effect warnings before execution. Its work forecast remains unmeasured without comparable run evidence.
 
-The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
+The skills are portable folders with Markdown instructions and, where useful, local scripts or assets. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
 ## Agent support software and repository conventions
 
-**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes four standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
+**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes five standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
 
 | Repository component | Meaning and boundary |
 | --- | --- |
@@ -50,6 +51,16 @@ python3 skills/release-evidence/scripts/verify_public_main.py \
 ```
 
 Only a `verified_public_main` result supports saying that diagram is on **public main**. A website change needs its own production URL readback before calling it **production**. A `not_on_public_main` or `inconclusive` result leaves the claim at **prepared** until the relevant surface is verified.
+
+## Preflight a declared workflow
+
+Use [Agent Schematic](skills/agent-schematic/SKILL.md) when a small step graph,
+pinned local inputs, and possible effects would help decide what to do next.
+Its compiler produces a plan and warnings, with an SVG only when a diagram
+answers a named reader question. [The composition boundary](skills/agent-schematic/references/composition.md)
+keeps this lightweight skill separate from any future host-enforced recorder,
+provenance verifier, or viewer. A skill and its generated files do not prove
+that a workflow ran or that a public effect occurred.
 
 ## Install locally
 
