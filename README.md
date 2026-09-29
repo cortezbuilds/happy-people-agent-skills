@@ -23,6 +23,8 @@ The skills are portable Markdown packages. They do not depend on Notion, a hoste
 
 Use [Release Evidence](skills/release-evidence/SKILL.md) when a README diagram, icon, or screenshot is proposed. First ask what it helps a reader understand and what implementation change would make it stale. If prose works better or no one can keep the visual current, leave it out.
 
+Keep explanatory diagrams as editable Mermaid or SVG when practical. A rendered image can carry its recipe in metadata, but check that the published file still contains it and keep the source separately; metadata alone does not establish that the image matches the current code.
+
 For example, a changed diagram in `README.md` is **prepared** while it exists only locally, in a build, or in a pull request. After publication, check the exact file from unauthenticated public `main`:
 
 ```sh

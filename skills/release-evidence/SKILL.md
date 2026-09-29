@@ -13,7 +13,9 @@ Before adding one, name the reader's question it answers and the source files or
 
 Choose a format that fits the job and the repository. Keep diagrams accessible with adjacent text or meaningful alt text. Describe the insight in the caption, not just the objects drawn. Verify that labels, arrows, example inputs, and outputs reflect the current implementation. Mark a proposed feature as proposed rather than drawing it as deployed.
 
-Give every accepted visual a freshness strategy: identify the implementation or product behavior it represents, what change would make it stale, and where the maintainers will update or remove it. Keep editable source when practical. If the relationship cannot be checked or maintained, use prose or leave the visual out.
+Prefer a diagram kept as Mermaid source in Markdown or an editable SVG when that communicates the point. If a rendered image is needed, keep its editable recipe or source alongside it. Where the format and renderer support it, the image may also carry a machine-readable recipe or source reference in metadata, as ComfyUI can do with PNG workflows. Review that metadata for private prompts, paths, and identifiers before publication. Extract it from the exact exported file and, for a deployed asset, from the file the public site serves. Keep a separate source or sidecar because re-encoding and delivery systems may remove metadata. Embedded metadata is useful context, not proof that the pixels match current code or that the image reached production.
+
+Give every accepted visual a freshness strategy: identify the implementation or product behavior it represents, what change would make it stale, and where the maintainers will update or remove it. If the relationship cannot be checked or maintained, use prose or leave the visual out.
 
 ## Separate preparation from release
 
