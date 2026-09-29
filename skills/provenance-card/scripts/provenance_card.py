@@ -401,7 +401,8 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
                 out.append(svg_text(32, cursor, citation, size=11, color="#9ED1FF"))
                 out.append("</a>")
             else:
-                out.append(svg_text(32, cursor, f"{ref}  local digest in sources.md",
+                out.append(svg_text(32, cursor,
+                                    shorten_cells(f"{ref}  local digest in sources.md", 41),
                                     size=11, color="#B5C7D8"))
             cursor += 17
         y += height + 12
@@ -425,7 +426,8 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
                 out.append(svg_text(23, y, citation, size=10, color="#9ED1FF"))
                 out.append("</a>")
             else:
-                out.append(svg_text(23, y, f"{ref}  local digest in sources.md",
+                out.append(svg_text(23, y,
+                                    shorten_cells(f"{ref}  local digest in sources.md", 41),
                                     size=10, color="#B5C7D8"))
             y += 15
         y += 3

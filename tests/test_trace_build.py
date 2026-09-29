@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -240,6 +241,36 @@ class BuildTraceTests(unittest.TestCase):
         result = self.run_trace()
         self.assertTrue(result["success"])
         self.assertEqual((self.root / "output.txt").read_text(), "selected-name")
+
+    def test_relative_path_entry_is_resolved_from_build_root(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        root_bin = self.root / "bin"
+        caller_bin = self.root / "caller" / "bin"
+        root_bin.mkdir()
+        caller_bin.mkdir(parents=True)
+        root_program = root_bin / "selected-builder"
+        caller_program = caller_bin / "selected-builder"
+        for path, label in ((root_program, "build root"), (caller_program, "tracer cwd")):
+            path.write_text(
+                f"#!{sys.executable}\n"
+                "from pathlib import Path\n"
+                f"Path('output.txt').write_text({label!r})\n",
+                encoding="utf-8",
+            )
+            path.chmod(0o755)
+        self.write_spec(["selected-builder"], inputs=["bin/selected-builder", "input.txt"])
+
+        caller_cwd = Path.cwd()
+        try:
+            os.chdir(self.root / "caller")
+            with mock.patch.dict(os.environ, {"PATH": "bin"}):
+                result = self.run_trace()
+        finally:
+            os.chdir(caller_cwd)
+
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), "build root")
+        self.assertEqual(result["executable"], trace_build.sha256_file(root_program))
 
     def test_paths_cannot_escape_root(self) -> None:
         (self.root / "builder.py").write_text("pass\n", encoding="utf-8")

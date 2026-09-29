@@ -56,7 +56,13 @@ def resolve_executable(root: Path, program: str) -> Path | None:
         if not candidate.is_absolute():
             candidate = root / candidate
     else:
-        located = shutil.which(program)
+        # Popen runs with cwd=root. execvp interprets relative PATH entries
+        # from that directory, while shutil.which would use the tracer's cwd.
+        search_path = os.pathsep.join(
+            entry if os.path.isabs(entry) else str(root / entry)
+            for entry in os.get_exec_path()
+        )
+        located = shutil.which(program, path=search_path)
         if located is None:
             return None
         candidate = Path(located)

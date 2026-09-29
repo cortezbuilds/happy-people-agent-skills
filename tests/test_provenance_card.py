@@ -65,6 +65,30 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_long_local_evidence_id_fits_claim_and_stage_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = fixture("a" * 64)
+            long_id = "L" + "x" * 31
+            record["evidence"][1]["id"] = long_id
+            for claim in record["claims"]:
+                claim["evidence_ids"] = [
+                    long_id if ref == "E2" else ref for ref in claim["evidence_ids"]
+                ]
+            record["stages"]["local"]["evidence_ids"] = [long_id]
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+            output = root / "card"
+            result = run("build", manifest, "--out", output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ET.parse(output / "card.svg").getroot()
+            rows = [node.text for node in svg.iter()
+                    if node.text and node.text.startswith(long_id)]
+            self.assertEqual(len(rows), 3)
+            self.assertTrue(all(row.endswith("…") for row in rows))
+            self.assertTrue(all(len(row) <= 41 for row in rows))
+            self.assertEqual(run("verify", output).returncode, 0)
+
     def test_force_replaces_symlink_entry_without_touching_its_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

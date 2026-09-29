@@ -5,9 +5,11 @@ on:
     paths:
       - .github/workflows/provenance-card.yml
       - skills/provenance-card/**
+      - skills/release-evidence/scripts/verify_public_main.py
       - tests/test_provenance_card.py
       - tests/test_trace_build.py
       - tests/test_verify_trace_receipts.py
+      - tests/test_verify_public_main.py
       - tests/fixtures/provenance-card/**
 
 permissions:
