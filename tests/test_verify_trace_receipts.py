@@ -17,10 +17,11 @@ import verify_trace_receipts  # noqa: E402
 
 
 class SavedTraceReceiptTests(unittest.TestCase):
-    def copy_saved_receipts(self, source: Path | None = None) -> Path:
+    def copy_saved_receipts(self, source: Path | None = None,
+                            destination: str = "receipts") -> Path:
         """Copy only the records under test, never the tests run's own receipt."""
         source = source or ROOT / "tests/fixtures/provenance-card/validation/receipts"
-        copied = Path(self.temp.name) / "receipts"
+        copied = Path(self.temp.name) / destination
         copied.mkdir()
         for name in ("build.json", "verify.json"):
             shutil.copy2(source / name, copied / name)
@@ -44,6 +45,20 @@ class SavedTraceReceiptTests(unittest.TestCase):
 
     def test_saved_receipts_match_fresh_fixture(self) -> None:
         verify_trace_receipts.verify(ROOT, self.generated, names=("build", "verify"))
+
+    def test_forged_trace_root_and_cwd_fail(self) -> None:
+        for name in ("build", "verify"):
+            for field in ("root", "cwd"):
+                with self.subTest(receipt=name, field=field):
+                    copied = self.copy_saved_receipts(destination=f"receipts-{name}-{field}")
+                    path = copied / f"{name}.json"
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                    record[field] = "../different-checkout"
+                    path.write_text(json.dumps(record), encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, f"{name} trace {field}"):
+                        verify_trace_receipts.verify(
+                            ROOT, self.generated, copied, ("build", "verify")
+                        )
 
     def test_forged_matching_spec_digests_do_not_bypass_trace_schema(self) -> None:
         cases = (

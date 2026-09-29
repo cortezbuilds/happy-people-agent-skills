@@ -51,28 +51,40 @@ def sha256_bytes(data: bytes) -> dict[str, Any]:
     return {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
 
 
-def resolve_executable(root: Path, program: str) -> Path | None:
+def resolve_executable(root: Path, program: str) -> tuple[Path, str] | None:
     if "/" in program:
         candidate = Path(program)
         if not candidate.is_absolute():
             candidate = root / candidate
+        invocation = program
     else:
         # Popen runs with cwd=root. execvp interprets relative PATH entries
         # from that directory, while shutil.which would use the tracer's cwd.
+        path_entries = os.get_exec_path()
         search_path = os.pathsep.join(
             entry if os.path.isabs(entry) else str(root / entry)
-            for entry in os.get_exec_path()
+            for entry in path_entries
         )
         located = shutil.which(program, path=search_path)
         if located is None:
             return None
         candidate = Path(located)
-    # Keep the invocation name: multi-call executables can dispatch on argv[0].
-    # Opening this path for hashing still follows the symlink to its target.
+        selected = Path(os.path.abspath(candidate))
+        invocation = None
+        for entry in path_entries:
+            path = f"{entry}/{program}" if entry else program
+            test_path = Path(path) if os.path.isabs(path) else root / path
+            if Path(os.path.abspath(test_path)) == selected:
+                invocation = path
+                break
+        if invocation is None:
+            return None
+    # Hash the selected pathname, including a symlink's target, while preserving
+    # the exec pathname spelling: shebang interpreters expose it as sys.argv[0].
     candidate = Path(os.path.abspath(candidate))
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
         return None
-    return candidate
+    return candidate, invocation
 
 
 def repo_path(root: Path, name: str, *, must_exist: bool) -> Path:
@@ -323,11 +335,11 @@ def ensure_receipt_disjoint(root: Path, spec_name: str, spec: dict[str, Any],
 
 
 def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
-    executable = resolve_executable(root, command[0])
+    selection = resolve_executable(root, command[0])
     empty_stream = sha256_bytes(b"") | {"complete": True, "error": None}
     group_fields = {"group_observation": "linux_procfs_waitid_wnowait",
                     "group_quiescent": False, "background_descendants_seen": False}
-    if executable is None:
+    if selection is None:
         return {"exit_code": None, "timed_out": False,
                 "stdout": empty_stream, "stderr": empty_stream,
                 "executable": None, "executable_stable": False,
@@ -338,6 +350,7 @@ def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
                 "executable": None, "executable_stable": False,
                 "error": "process_group_unobservable",
                 **(group_fields | {"group_observation": "unavailable"})}
+    executable, invocation = selection
     try:
         executable_before = sha256_file(executable)
     except OSError as exc:
@@ -347,7 +360,7 @@ def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
                 "error": f"executable_hash_{type(exc).__name__}", **group_fields}
     try:
         process = subprocess.Popen(
-            [str(executable), *command[1:]], cwd=root, stdin=subprocess.DEVNULL,
+            command, executable=invocation, cwd=root, stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             start_new_session=True,
         )

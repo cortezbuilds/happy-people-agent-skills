@@ -119,6 +119,8 @@ def verify(
     for name in names:
         spec, record = load_record(root, generated, name, receipt_dir)
         require(record.get("schema_version") == "build-trace/1", f"{name} receipt schema")
+        require(record.get("root") == ".", f"{name} trace root differs from checkout root")
+        require(record.get("cwd") == ".", f"{name} trace cwd differs from checkout root")
         require(record.get("capture_boundary") == "controlled_subprocess_stdio_and_declared_files",
                 f"{name} capture boundary")
         require(record.get("scope") == CAPTURE_SCOPE, f"{name} capture scope")
