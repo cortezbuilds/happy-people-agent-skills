@@ -58,6 +58,8 @@ steps always add an `unmodeled_outcome` branch. Unknown guards branch into
 explicit true and false assumptions. Path expansion defaults to 32 and can be
 set with `--max-paths` from 1 to 128; omitted branches set
 `path_coverage.outcome_space_incomplete` and produce a stable warning ID.
+When capped, the retained paths include a representative unknown branch if
+one was produced; they do not cover every omitted alternative.
 An unmodeled model or external-read step upstream of a write adds a
 `UNMODELED_OUTCOME_FEEDS_EFFECT` warning based on declared dependency reachability;
 it does not assert that a runtime path will take that branch.
@@ -74,13 +76,17 @@ The SVG gate requires a named reader question, an explicit relationship
 (`trust_boundary`, `data_flow`, or `state_gate`), pinned evidence references on
 every step, and a simple two-to-five-step chain that the layout can show
 faithfully. The SVG carries accessible title/description text, visible
-observed/forecast and public-write labels, and an embedded manifest with input
-hashes and warning IDs. Other
-contracts remain JSON and prose; an SVG is not automatic decoration.
+pinned-local/forecast and public-write labels, and an embedded manifest with
+input hashes, the local compiler source digest, and warning IDs. Other contracts
+remain JSON and prose; an SVG is not automatic decoration.
+Rendered text rejects XML-invalid characters and carriage returns that would
+change when parsed back from the SVG.
 
+The plan and SVG manifest identify the compiler by its local source SHA-256.
+That digest is a reproducibility aid, not a signed build or host attestation.
 The compiler emits deterministic sorted JSON and SVG for identical input bytes
-and compiler version. It does **not** yet compare a later observed execution
-trace to a plan; that remains the fifth acceptance target in
+and compiler source in the same runtime. It does **not** yet compare a later
+observed execution trace to a plan; that remains the fifth acceptance target in
 [foundations](foundations.md#acceptance-for-the-first-local-slice). It also
 does not implement a general [JSON Schema validator](https://json-schema.org/draft/2020-12/json-schema-validation)
 or trust [MCP tool effect annotations](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)

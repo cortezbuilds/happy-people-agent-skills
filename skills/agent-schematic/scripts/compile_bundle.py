@@ -23,11 +23,13 @@ START_SCHEMA = "agent-schematic/start-v1"
 PLAN_SCHEMA = "agent-schematic/plan-v1"
 WARNINGS_SCHEMA = "agent-schematic/warnings-v1"
 SVG_SCHEMA = "agent-schematic/svg-v1"
+COMPILER_NAME = "agent-schematic/compile_bundle.py"
 IDENT = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"pure", "model", "external_read", "external_write", "irreversible"}
 WRITE_KINDS = {"external_write", "irreversible"}
 OPEN_OUTCOME_KINDS = {"model", "external_read"}
+UNKNOWN_STATUSES = {"unmodeled_outcome", "skipped_guard_unknown"}
 RECEIPT_KINDS = {"public_readback", "provider_receipt", "independent_state_readback"}
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
@@ -87,6 +89,24 @@ def exact_equal(left, right):
 
 def valid_id(value):
     return isinstance(value, str) and IDENT.fullmatch(value) is not None
+
+
+def valid_xml_text(value: str) -> bool:
+    """Check XML 1.0 characters before placing user text in an SVG node."""
+    return all(code in (9, 10, 13) or 0x20 <= code <= 0xD7FF or
+               0xE000 <= code <= 0xFFFD or 0x10000 <= code <= 0x10FFFF
+               for code in map(ord, value))
+
+
+def require_svg_text(value: str, label: str) -> None:
+    require(valid_xml_text(value), f"{label} has an XML 1.0 invalid character")
+    require("\r" not in value, f"{label} has a carriage return normalized by XML")
+
+
+def compiler_identity() -> dict:
+    """Identify the local source bytes, without claiming a signed build."""
+    return {"name": COMPILER_NAME,
+            "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
 def extract_fact(spec: dict, raw: bytes, source_label: str):
@@ -207,6 +227,7 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
     for key in ("title", "objective"):
         require(isinstance(contract.get(key), str) and contract[key].strip(),
                 f"contract needs {key}")
+    require_svg_text(contract["title"], "contract title")
     steps = contract.get("steps")
     require(isinstance(steps, list) and 1 <= len(steps) <= 20,
             "contract needs 1 to 20 finite steps")
@@ -220,6 +241,7 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
         label = step.get("label")
         require(isinstance(label, str) and 1 <= len(label) <= 58,
                 f"{step_id}: label must have 1 to 58 characters")
+        require_svg_text(label, f"{step_id}: label")
         deps = step.get("depends_on", [])
         require(isinstance(deps, list) and len(deps) == len(set(deps)) and
                 all(dep in seen for dep in deps),
@@ -262,6 +284,7 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
                 isinstance(visual.get("reader_question"), str) and
                 1 <= len(visual["reader_question"]) <= 50,
                 "visual needs a relationship and a reader question of at most 50 characters")
+        require_svg_text(visual["reader_question"], "visual reader question")
 
 
 def warning(code: str, message: str, step_id: str | None = None,
@@ -337,6 +360,16 @@ def append_result(path: dict, step_id: str, status: str, outcome: str | None = N
     return branch
 
 
+def has_unknown_branch(path: dict) -> bool:
+    return any(result["forecast_status"] in UNKNOWN_STATUSES
+               for result in path["step_results"])
+
+
+def has_current_unknown_branch(path: dict) -> bool:
+    return (bool(path["step_results"]) and
+            path["step_results"][-1]["forecast_status"] in UNKNOWN_STATUSES)
+
+
 def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
     paths = [{"facts": copy.deepcopy(observed_facts), "step_results": [],
               "conditions": []}]
@@ -389,7 +422,18 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
             if first_truncated_step is None:
                 first_truncated_step = step_id
             truncated = True
-            produced = produced[:max_paths]
+            retained = produced[:max_paths]
+            omitted = produced[max_paths:]
+            representative = None
+            if not any(has_current_unknown_branch(path) for path in retained):
+                representative = next((path for path in omitted
+                                       if has_current_unknown_branch(path)), None)
+            if representative is None and not any(has_unknown_branch(path) for path in retained):
+                representative = next((path for path in omitted
+                                       if has_unknown_branch(path)), None)
+            if representative is not None:
+                retained[-1] = representative
+            produced = retained
         paths = produced
     for index, path in enumerate(paths, start=1):
         path["path_id"] = f"p{index:03d}"
@@ -424,7 +468,7 @@ def svg_element(parent, tag, **attrs):
                          {key.replace("_", "-"): str(value) for key, value in attrs.items()})
 
 
-def render_svg(contract: dict, contract_hash: str, start_hash: str, evidence: dict,
+def render_svg(contract: dict, contract_hash: str, start_hash: str, compiler: dict, evidence: dict,
                gates: dict, observed_facts: dict, warning_ids: list[str]):
     steps = contract["steps"]
     width = 480
@@ -444,6 +488,7 @@ def render_svg(contract: dict, contract_hash: str, start_hash: str, evidence: di
                  "independent approval, runtime recheck, and receipt. Steps: " +
                  "; ".join(step["label"] for step in steps) + ".")
     manifest = {"schema": SVG_SCHEMA,
+                "compiler": compiler,
                 "contract_sha256": contract_hash,
                 "start_sha256": start_hash,
                 "evidence_sha256": {key: item["sha256"] for key, item in evidence.items()},
@@ -527,6 +572,7 @@ def compile_bundle(contract_path: Path, start_path: Path, max_paths: int = 32,
     evidence, observed_facts, approvals = validate_start(start, start_path,
                                                         workspace_root)
     validate_contract(contract, observed_facts, evidence)
+    compiler = compiler_identity()
     gates = {}
     warnings = []
     steps_by_id = {step["id"]: step for step in contract["steps"]}
@@ -592,6 +638,7 @@ def compile_bundle(contract_path: Path, start_path: Path, max_paths: int = 32,
             entry["effect_gate"] = gates[step["id"]]
         step_summaries.append(entry)
     plan = {"schema": PLAN_SCHEMA, "id": contract["id"],
+            "compiler": compiler,
             "title": contract["title"], "objective": contract["objective"],
             "forecast_only": True, "execution": "not_run",
             "duration": {"estimate": None, "basis": "unmeasured"},
@@ -612,7 +659,7 @@ def compile_bundle(contract_path: Path, start_path: Path, max_paths: int = 32,
               "warnings": sorted(warnings, key=lambda item: item["id"]),
               "no_visual_reason": None if visual_emitted else visual_reason,
               "path_truncated": enumeration["truncated"]}
-    svg = (render_svg(contract, contract_hash, start_hash, evidence, gates,
+    svg = (render_svg(contract, contract_hash, start_hash, compiler, evidence, gates,
                       observed_facts, [item["id"] for item in warnings])
            if visual_emitted else None)
     return plan, report, svg

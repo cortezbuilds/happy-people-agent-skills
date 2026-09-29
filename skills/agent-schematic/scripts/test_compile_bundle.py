@@ -140,6 +140,38 @@ class CompilerTests(unittest.TestCase):
         self.assertIn("W-PATH_LIMIT-decide_visual",
                       [item["id"] for item in report["warnings"]])
 
+    def test_path_cap_retains_a_representative_unknown_branch(self):
+        contract = json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8"))
+        contract["steps"][0]["kind"] = "model"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, report, _ = compiler.compile_bundle(path, SIMPLE_START, max_paths=1)
+            result = plan["predicted_paths"][0]["step_results"][-1]
+            self.assertEqual(result["forecast_status"], "unmodeled_outcome")
+            self.assertTrue(plan["enumeration"]["truncated"])
+            self.assertEqual(plan["enumeration"]["omitted_branches_at_least"], 1)
+            self.assertIn("W-PATH_LIMIT-check_note",
+                          [item["id"] for item in report["warnings"]])
+
+            contract["steps"][0]["outcomes"].append({"id": "absent", "result": "failure"})
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START, max_paths=2)
+            statuses = [item["step_results"][-1]["forecast_status"]
+                        for item in plan["predicted_paths"]]
+            self.assertEqual(statuses, ["success", "unmodeled_outcome"])
+
+            contract["steps"][0]["outcomes"] = contract["steps"][0]["outcomes"][:1]
+            second = copy.deepcopy(contract["steps"][0])
+            second.update({"id": "check_again", "label": "Check the note again", "guard": [],
+                           "outcomes": [{"id": "again", "result": "success"}]})
+            contract["steps"].append(second)
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START, max_paths=1)
+            statuses = [item["forecast_status"]
+                        for item in plan["predicted_paths"][0]["step_results"]]
+            self.assertEqual(statuses, ["unmodeled_outcome", "unmodeled_outcome"])
+
     def test_prose_only_fixture_emits_no_svg_and_pure_outcome(self):
         plan, report, svg = compiler.compile_bundle(SIMPLE_CONTRACT, SIMPLE_START)
         self.assertIsNone(svg)
@@ -214,6 +246,11 @@ class CompilerTests(unittest.TestCase):
         self.assertIsNotNone(metadata)
         manifest = json.loads(metadata.text)
         self.assertEqual(manifest["schema"], compiler.SVG_SCHEMA)
+        expected_compiler = {"name": compiler.COMPILER_NAME,
+                             "source_sha256": hashlib.sha256(
+                                 (HERE / "compile_bundle.py").read_bytes()).hexdigest()}
+        self.assertEqual(plan["compiler"], expected_compiler)
+        self.assertEqual(manifest["compiler"], expected_compiler)
         self.assertEqual(manifest["start_sha256"], plan["input_pins"]["start_sha256"])
         self.assertEqual(manifest["contract_sha256"], plan["input_pins"]["contract_sha256"])
         self.assertEqual(manifest["execution"], "not_run")
@@ -228,6 +265,39 @@ class CompilerTests(unittest.TestCase):
         self.assertIn("FORECAST ONLY", svg)
         self.assertIn("PINNED LOCAL START", svg)
         self.assertTrue(plan["visual"]["emitted"])
+
+    def test_svg_rejects_xml_invalid_text_and_escapes_normal_punctuation(self):
+        original = json.loads(CROSS_CONTRACT.read_text(encoding="utf-8"))
+        for field in ("title", "label", "reader_question"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                contract = copy.deepcopy(original)
+                if field == "title":
+                    contract["title"] += "\x00"
+                elif field == "label":
+                    contract["steps"][0]["label"] += "\x00"
+                else:
+                    contract["visual"]["reader_question"] += "\x00"
+                path = Path(temporary) / "contract.json"
+                path.write_text(json.dumps(contract), encoding="utf-8")
+                with self.assertRaisesRegex(compiler.BundleError, "XML 1.0 invalid character"):
+                    compiler.compile_bundle(path, CROSS_START)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            contract = copy.deepcopy(original)
+            contract["steps"][0]["label"] = "Check\rsource"
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            with self.assertRaisesRegex(compiler.BundleError, "carriage return normalized by XML"):
+                compiler.compile_bundle(path, CROSS_START)
+
+        original["steps"][0]["label"] = "Check <source> & destination"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(original), encoding="utf-8")
+            _, _, svg = compiler.compile_bundle(path, CROSS_START)
+        root = ET.fromstring(svg)
+        self.assertIn("Check <source> & destination",
+                      [node.text for node in root.iter() if node.text])
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ claim with a scope and extraction version.
 
 The [ComfyUI-style artifact idea](https://github.com/Comfy-Org/docs/blob/main/built-in-nodes/SaveImage.mdx)
 is useful as a **view plus manifest** contract:
-visible claims, source identifiers and digests, compiler version, assumptions,
+visible claims, source identifiers and digests, compiler source digest, assumptions,
 and warnings travel together. The view may be an SVG, table, or text report.
 The full regeneration recipe may be embedded only when size, permissions, and
 format allow; otherwise keep source bytes and compiler beside the view and pin
@@ -49,10 +49,12 @@ claim.
 For a known start state and pure, total, specified transitions, the compiler
 can calculate one declared end state. Finite, declared alternative outcomes
 produce a set of possible end states. An unmodeled model response, live service,
-or arbitrary program widens that set to **unknown**. The compiler must keep an
-explicit unknown branch and cap path expansion rather than silently dropping
-possibilities. An estimated duration needs observed timing data or a documented
-bound with environment and sample size; no timing data means **unmeasured**.
+or arbitrary program widens that set to **unknown**. When a path cap omits
+branches, the compiler retains a representative unknown path when one exists
+and reports incomplete coverage; the retained path does not cover every
+possible unknown. An estimated duration needs observed timing data or a
+documented bound with environment and sample size; no timing data means
+**unmeasured**.
 
 Only independent, pure steps with established equivalent semantics may be
 reordered or cached. A public write must keep its fresh-state assertion,
@@ -153,7 +155,7 @@ infer a repository topology directly from arbitrary source code.
 
 ## Acceptance for the first local slice
 
-1. Identical bundle, observed-state fixture, and compiler version produce
+1. Identical bundle, pinned local start fixture, and compiler source produce
    identical canonical outputs.
 2. A pure finite path yields its declared outcome; an external or model step
    retains an unknown alternative.
