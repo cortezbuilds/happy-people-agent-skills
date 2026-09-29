@@ -7,6 +7,7 @@ Small, optional skills shared as source-available software for community use. Th
 - **Intent Stewardship** — preserves the user's outcome, constraints, authority, and acceptance criteria while work is delegated across agents, tools, and repositories.
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
+- **Security Report Stewardship** — turns suspected security or AI-safety issues into bounded, evidence-backed private reports, with scope checks, claim calibration, safe reproduction planning, cost controls, and reporter expectations.
 - **Release Evidence** — checks whether a visual explains verified behavior and can stay current, then distinguishes locally prepared work from files visible on public `main` and content observed in production.
 
 The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
