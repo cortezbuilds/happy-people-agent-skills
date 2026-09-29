@@ -27,7 +27,7 @@ For a cloud service, the client build does not pin the entire backend. Record wh
 
 ## Keep three experiments separate
 
-**Historical replay:** preserve the supplied chronology. An exact live replay is allowed only after retirement of the original credential is confirmed and the destination is explicitly authorized. The local operator supplies it without exposing it to the documentation worker. Label reconstructed portions.
+**Historical replay:** preserve the supplied chronology. An exact live replay is an exception allowed only after retirement of the original credential is confirmed, the target and method are authorized, the exact destination receives separate approval, and the active run contract explicitly sets `real_secrets_allowed: true`. Its default `false` gate prohibits the replay even when the other conditions hold. The local operator supplies the value without exposing it to the documentation worker. Label reconstructed portions.
 
 **Minimal reproducer:** remove irrelevant material one change at a time. A successfully reduced case is not the same as the original history.
 
