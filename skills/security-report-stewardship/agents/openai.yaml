@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Report Stewardship"
+  short_description: "Prepare bounded, evidence-backed private security reports"
+  default_prompt: "Use $security-report-stewardship to prepare a private report with verified scope, safe fixtures, calibrated claims, and an explicit submission state."

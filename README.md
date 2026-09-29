@@ -14,7 +14,7 @@ The skills are portable Markdown packages. They do not depend on Notion, a hoste
 
 ## Agent support software and repository conventions
 
-**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes four standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
+**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes five standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
 
 | Repository component | Meaning and boundary |
 | --- | --- |

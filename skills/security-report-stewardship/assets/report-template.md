@@ -12,10 +12,10 @@ One narrow finding, affected surface, and demonstrated effect.
 - Timestamp UTC:
 
 ## Preconditions and authority
-State the researcher-owned or otherwise authorized setup and relevant scope.
+Record target and program authorization, the allowed methods and scope, and the source and date of that decision. Separately state which fixtures or test accounts the researcher controls. Ownership of an account or fixture does not authorize testing the vendor service.
 
 ## Steps to reproduce
-1. Use a synthetic or retired fixture.
+1. Use a never-valid synthetic fixture. Replaying a formerly real secret is an exception requiring confirmed retirement and separate approval for the exact destination.
 2. Record the exact action and input surface.
 3. Record the observed output without unnecessary sensitive values.
 
