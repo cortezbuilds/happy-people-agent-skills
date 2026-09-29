@@ -9,3 +9,6 @@ local/
 # Local Python test artifacts.
 __pycache__/
 *.pyc
+
+# Reproducible fixture inputs are tracked; generated cards are local output.
+tests/fixtures/provenance-card/out/

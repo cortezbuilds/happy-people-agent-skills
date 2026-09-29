@@ -7,14 +7,13 @@ Small, optional skills shared as source-available software for community use. Th
 - **Intent Stewardship** — preserves the user's outcome, constraints, authority, and acceptance criteria while work is delegated across agents, tools, and repositories.
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
-- **Provenance Card** — builds a color and text labeled SVG index of claims, deep citations, exact input digests, and deployment states, with an offline consistency receipt.
 - **Release Evidence** — checks whether a visual explains verified behavior and can stay current, then distinguishes locally prepared work from files visible on public `main` and content observed in production.
 
 The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
 ## Agent support software and repository conventions
 
-**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes five standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
+**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes four standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
 
 | Repository component | Meaning and boundary |
 | --- | --- |
@@ -55,15 +54,6 @@ Only a `verified_public_main` result supports saying that diagram is on **public
 ## Install locally
 
 Copy the desired folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
-
-For example, after copying `skills/provenance-card` to `~/.codex/skills/provenance-card`, check its bundled script from any project directory:
-
-```sh
-PROVENANCE_CARD_SKILL_DIR="$HOME/.codex/skills/provenance-card"
-python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/provenance_card.py" --help
-```
-
-Set the variable to the actual directory containing its `SKILL.md` if installed elsewhere. This command checks that the copied script is available; it does not establish that an agent loaded or invoked the skill.
 
 Installation and validation are per machine. The repository contains the distributable source and does not show whether a reader's agent has installed or activated a skill.
 

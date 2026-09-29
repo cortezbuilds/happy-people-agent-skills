@@ -56,15 +56,6 @@ Only a `verified_public_main` result supports saying that diagram is on **public
 
 Copy the desired folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
 
-For example, after copying `skills/provenance-card` to `~/.codex/skills/provenance-card`, check its bundled script from any project directory:
-
-```sh
-PROVENANCE_CARD_SKILL_DIR="$HOME/.codex/skills/provenance-card"
-python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/provenance_card.py" --help
-```
-
-Set the variable to the actual directory containing its `SKILL.md` if installed elsewhere. This command checks that the copied script is available; it does not establish that an agent loaded or invoked the skill.
-
 Installation and validation are per machine. The repository contains the distributable source and does not show whether a reader's agent has installed or activated a skill.
 
 ## License and safety

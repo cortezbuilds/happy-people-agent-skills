@@ -1,0 +1,158 @@
+{
+  "background_descendants_seen": false,
+  "capture_boundary": "controlled_subprocess_stdio_and_declared_files",
+  "capture_complete": true,
+  "command": [
+    "python3",
+    "skills/provenance-card/scripts/provenance_card.py",
+    "build",
+    "tests/fixtures/provenance-card/manifest.json",
+    "--out",
+    "tests/fixtures/provenance-card/out",
+    "--input",
+    "I1=tests/fixtures/provenance-card/base-readme.md",
+    "--input",
+    "I2=tests/fixtures/provenance-card/branch-readme.md"
+  ],
+  "cwd": ".",
+  "declared_outputs_present": true,
+  "duration_monotonic_ns": 163316789,
+  "error": null,
+  "executable": {
+    "bytes": 30913848,
+    "sha256": "f7c6210eb40fadcd3c2889dddd24a15fc2c9f926aec5a03bf9da66e12d581526"
+  },
+  "executable_after": {
+    "bytes": 30913848,
+    "sha256": "f7c6210eb40fadcd3c2889dddd24a15fc2c9f926aec5a03bf9da66e12d581526"
+  },
+  "executable_stable": true,
+  "exit_code": 0,
+  "finished_at_utc": "2026-09-29T14:34:09.644598+00:00",
+  "finished_monotonic_ns": 70025758340534,
+  "group_observation": "linux_procfs_waitid_wnowait",
+  "group_quiescent": true,
+  "input_stable": true,
+  "inputs_after": [
+    {
+      "bytes": 30193,
+      "exists": true,
+      "path": "skills/provenance-card/scripts/provenance_card.py",
+      "sha256": "3036bd555c72baf3dbe9c55555be338d9f5cd881542cfd8eb832e806ce8a086f"
+    },
+    {
+      "bytes": 2276,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/manifest.json",
+      "sha256": "c762c9d46bf80dee1dbf1fb0ba5f827d5dfac8cc55f4f3287aa8963f1257cf44"
+    },
+    {
+      "bytes": 7290,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/base-readme.md",
+      "sha256": "7ff7200a721678eb13114467e3d18911285a034af3d4851d83b04a5baf036b58"
+    },
+    {
+      "bytes": 7466,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/branch-readme.md",
+      "sha256": "b7246d6a75395eb2f983752572ce180e387f3324ce6adc10dd2f2ade901b5393"
+    }
+  ],
+  "inputs_before": [
+    {
+      "bytes": 30193,
+      "exists": true,
+      "path": "skills/provenance-card/scripts/provenance_card.py",
+      "sha256": "3036bd555c72baf3dbe9c55555be338d9f5cd881542cfd8eb832e806ce8a086f"
+    },
+    {
+      "bytes": 2276,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/manifest.json",
+      "sha256": "c762c9d46bf80dee1dbf1fb0ba5f827d5dfac8cc55f4f3287aa8963f1257cf44"
+    },
+    {
+      "bytes": 7290,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/base-readme.md",
+      "sha256": "7ff7200a721678eb13114467e3d18911285a034af3d4851d83b04a5baf036b58"
+    },
+    {
+      "bytes": 7466,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/branch-readme.md",
+      "sha256": "b7246d6a75395eb2f983752572ce180e387f3324ce6adc10dd2f2ade901b5393"
+    }
+  ],
+  "outputs_after": [
+    {
+      "bytes": 2276,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/out/manifest.json",
+      "sha256": "c762c9d46bf80dee1dbf1fb0ba5f827d5dfac8cc55f4f3287aa8963f1257cf44"
+    },
+    {
+      "bytes": 6504,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/out/card.svg",
+      "sha256": "ee4fbcbfc085b08a82807624ab49b9031ee0fdf82d4009cdf93dbcad1f3bd965"
+    },
+    {
+      "bytes": 2601,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/out/sources.md",
+      "sha256": "fca524279b4f9fdaf1de182152e4ac5d6bcd2e1acbde407fea8f119520ff2755"
+    },
+    {
+      "bytes": 450,
+      "exists": true,
+      "path": "tests/fixtures/provenance-card/out/receipt.json",
+      "sha256": "e01dae5a7865a150c1beb51509d93cc2e3d1eda3b78726f66812851b00145779"
+    }
+  ],
+  "outputs_before": [
+    {
+      "exists": false,
+      "path": "tests/fixtures/provenance-card/out/manifest.json"
+    },
+    {
+      "exists": false,
+      "path": "tests/fixtures/provenance-card/out/card.svg"
+    },
+    {
+      "exists": false,
+      "path": "tests/fixtures/provenance-card/out/sources.md"
+    },
+    {
+      "exists": false,
+      "path": "tests/fixtures/provenance-card/out/receipt.json"
+    }
+  ],
+  "root": ".",
+  "schema_version": "build-trace/1",
+  "scope": "Linux same-process-group metadata only: declared-file hashes and captured stdio digests. New-session/group descendants, model context, host activity, and all-process I/O are outside this capture.",
+  "spec": {
+    "bytes": 874,
+    "path": "tests/fixtures/provenance-card/validation/build.spec.json",
+    "sha256": "07256b164727cfaea6184d2a5ab57256a42c1975187675ec7fb50f37e167900b"
+  },
+  "started_at_utc": "2026-09-29T14:34:09.481258+00:00",
+  "started_monotonic_ns": 70025595023745,
+  "status": "completed",
+  "stderr": {
+    "bytes": 0,
+    "complete": true,
+    "error": null,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stdout": {
+    "bytes": 143,
+    "complete": true,
+    "error": null,
+    "sha256": "615ee8f0187b096c5c2e7b034f6ba1408f0bd013a4514404b73c8c292d3621fa"
+  },
+  "success": true,
+  "timed_out": false,
+  "timeout_seconds": 30
+}

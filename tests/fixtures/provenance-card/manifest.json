@@ -1,0 +1,81 @@
+{
+  "as_of": "2026-09-29T12:37:50Z",
+  "claims": [
+    {
+      "class": "source",
+      "evidence_ids": [
+        "E1"
+      ],
+      "id": "C1",
+      "limit": "The commit records an earlier source state.",
+      "text": "The pinned main README lists four distributed skills."
+    },
+    {
+      "class": "observed",
+      "evidence_ids": [
+        "E2"
+      ],
+      "id": "C2",
+      "limit": "The local branch is a proposal, not a checked main or release.",
+      "text": "The local branch README now lists Provenance Card as a fifth skill."
+    },
+    {
+      "class": "unknown",
+      "evidence_ids": [],
+      "id": "C3",
+      "limit": "A local build cannot establish either stage.",
+      "text": "A reviewed merge and release have not been verified."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E1",
+      "label": "Base README lines 5-12",
+      "note": "Base commit and bytes checked in local Git; remote link not fetched in this run.",
+      "pin": "immutable",
+      "url": "https://github.com/cortezbuilds/happy-people-agent-skills/blob/0b1f876ccb15c5b22ac2e83b08e5fc7ad626e3a9/README.md?plain=1#L5-L12"
+    },
+    {
+      "id": "E2",
+      "label": "Local proposed README bytes",
+      "note": "Private working branch snapshot; no public-main or release claim.",
+      "observed_at": "2026-09-29T12:37:50Z",
+      "pin": "local",
+      "sha256": "b7246d6a75395eb2f983752572ce180e387f3324ce6adc10dd2f2ade901b5393",
+      "url": null
+    }
+  ],
+  "inputs": [
+    {
+      "id": "I1",
+      "kind": "text",
+      "label": "Base README at pinned commit",
+      "sha256": "7ff7200a721678eb13114467e3d18911285a034af3d4851d83b04a5baf036b58"
+    },
+    {
+      "id": "I2",
+      "kind": "text",
+      "label": "Local branch README snapshot",
+      "sha256": "b7246d6a75395eb2f983752572ce180e387f3324ce6adc10dd2f2ade901b5393"
+    }
+  ],
+  "schema": "provenance-card/1",
+  "stages": {
+    "checked_main": {
+      "evidence_ids": [],
+      "state": "unknown"
+    },
+    "local": {
+      "evidence_ids": [
+        "E2"
+      ],
+      "state": "verified"
+    },
+    "release": {
+      "evidence_ids": [],
+      "state": "unknown"
+    }
+  },
+  "summary": "The published skills list has four entries; a local branch proposes a fifth.",
+  "title": "A skill enters review"
+}

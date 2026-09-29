@@ -1,0 +1,30 @@
+{
+  "schema_version": "build-trace-spec/1",
+  "command": ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"],
+  "inputs": [
+    "skills/provenance-card/SKILL.md",
+    "skills/provenance-card/agents/openai.yaml",
+    "skills/provenance-card/references/manifest.md",
+    "skills/provenance-card/scripts/provenance_card.py",
+    "skills/provenance-card/scripts/trace_build.py",
+    "skills/provenance-card/scripts/verify_trace_receipts.py",
+    "skills/release-evidence/scripts/verify_public_main.py",
+    "tests/test_provenance_card.py",
+    "tests/test_trace_build.py",
+    "tests/test_verify_trace_receipts.py",
+    "tests/test_verify_public_main.py",
+    "tests/fixtures/provenance-card/manifest.json",
+    "tests/fixtures/provenance-card/base-readme.md",
+    "tests/fixtures/provenance-card/branch-readme.md",
+    "tests/fixtures/provenance-card/out/manifest.json",
+    "tests/fixtures/provenance-card/out/card.svg",
+    "tests/fixtures/provenance-card/out/sources.md",
+    "tests/fixtures/provenance-card/out/receipt.json",
+    "tests/fixtures/provenance-card/validation/build.spec.json",
+    "tests/fixtures/provenance-card/validation/verify.spec.json",
+    "tests/fixtures/provenance-card/validation/receipts/build.json",
+    "tests/fixtures/provenance-card/validation/receipts/verify.json"
+  ],
+  "outputs": [],
+  "timeout_seconds": 60
+}
