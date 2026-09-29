@@ -6,9 +6,11 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -65,6 +67,97 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_concurrent_no_force_builds_cannot_both_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first_record = fixture("a" * 64)
+            second_record = fixture("b" * 64)
+            second_record["title"] = "Competing card"
+            first_manifest, second_manifest = root / "first.json", root / "second.json"
+            first_manifest.write_text(json.dumps(first_record), encoding="utf-8")
+            second_manifest.write_text(json.dumps(second_record), encoding="utf-8")
+            output = root / "card"
+            output.mkdir()  # Both builders see the same initially empty directory.
+            claimed = root / "claimed"
+
+            # Pause the first process after it has claimed the output, before its
+            # first file is written. The second process then hits the exact race.
+            paused_builder = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import provenance_card as card
+original = card.replace_bytes
+def pause_first(path, data):
+    card.replace_bytes = original
+    Path(sys.argv[4]).write_text('claimed')
+    sys.stdin.buffer.read(1)
+    original(path, data)
+card.replace_bytes = pause_first
+card.build(Path(sys.argv[2]), Path(sys.argv[3]), False, [])
+"""
+            first = subprocess.Popen(
+                [sys.executable, "-u", "-c", paused_builder, str(SCRIPT.parent),
+                 str(first_manifest), str(output), str(claimed)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=False,
+            )
+            try:
+                deadline = time.monotonic() + 5
+                while not claimed.exists() and first.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(claimed.exists(), "first builder did not reach publication")
+                second = run("build", second_manifest, "--out", output)
+                self.assertNotEqual(second.returncode, 0, second.stdout)
+                self.assertIn("build reservation", second.stderr)
+            finally:
+                if first.stdin and not first.stdin.closed:
+                    first.stdin.write(b"x")
+                    first.stdin.close()
+                try:
+                    first.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    first.kill()
+                    first.wait(timeout=5)
+                if first.stdout:
+                    first.stdout.close()
+                if first.stderr:
+                    first.stderr.close()
+
+            self.assertEqual(first.returncode, 0)
+            self.assertEqual(json.loads((output / "manifest.json").read_text()), first_record)
+            self.assertEqual(run("verify", output).returncode, 0)
+            self.assertEqual(
+                sorted(entry.name for entry in output.iterdir()),
+                ["card.svg", "manifest.json", "receipt.json", "sources.md"],
+            )
+
+    def test_generated_file_modes_follow_process_umask(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(fixture("a" * 64)), encoding="utf-8")
+            output = root / "card"
+            set_umask_and_build = """
+import os
+import runpy
+import sys
+os.umask(int(sys.argv[1], 8))
+sys.argv = sys.argv[2:]
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+            for mask, force, expected in (("022", False, 0o644), ("077", True, 0o600)):
+                command = [sys.executable, "-c", set_umask_and_build, mask,
+                           str(SCRIPT), "build", str(manifest), "--out", str(output)]
+                if force:
+                    command.append("--force")
+                result = subprocess.run(command, capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for name in ("manifest.json", "card.svg", "sources.md", "receipt.json"):
+                    self.assertEqual(stat.S_IMODE((output / name).stat().st_mode), expected,
+                                     f"{name} with umask {mask}")
+                self.assertEqual(run("verify", output).returncode, 0)
+
     def test_common_cjk_title_keeps_readable_wrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

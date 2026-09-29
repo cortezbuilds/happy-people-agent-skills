@@ -22,7 +22,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 
 
 SCHEMA = "build-trace/1"
@@ -98,7 +98,9 @@ def file_state(root: Path, name: str) -> dict[str, Any]:
     return {"path": name, "exists": True, **sha256_file(path)}
 
 
-def read_spec(root: Path, spec_name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def read_spec(
+    root: Path, spec_name: str, *, mapped_input: Callable[[str], Path | None] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     spec_path = repo_path(root, spec_name, must_exist=True)
     raw = spec_path.read_bytes()
     spec = json.loads(raw)
@@ -117,7 +119,13 @@ def read_spec(root: Path, spec_name: str) -> tuple[dict[str, Any], dict[str, Any
         if len(paths) != len(set(paths)):
             raise ValueError(f"{key} contains duplicates")
         for path in paths:
-            repo_path(root, path, must_exist=(key == "inputs"))
+            repo_path(root, path, must_exist=False)
+            if key == "inputs":
+                alternative = mapped_input(path) if mapped_input is not None else None
+                if alternative is None:
+                    repo_path(root, path, must_exist=True)
+                elif not alternative.is_file():
+                    raise ValueError(f"declared mapped input is not a file: {path!r}")
     if set(spec["inputs"]) & set(spec["outputs"]):
         raise ValueError("inputs and outputs must be disjoint")
     timeout = spec["timeout_seconds"]

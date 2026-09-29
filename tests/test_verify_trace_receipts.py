@@ -45,6 +45,45 @@ class SavedTraceReceiptTests(unittest.TestCase):
     def test_saved_receipts_match_fresh_fixture(self) -> None:
         verify_trace_receipts.verify(ROOT, self.generated, names=("build", "verify"))
 
+    def test_forged_matching_spec_digests_do_not_bypass_trace_schema(self) -> None:
+        cases = (
+            ("empty-command", "command must be a nonempty"),
+            ("zero-timeout", "timeout_seconds must be in"),
+            ("duplicate-input", "inputs contains duplicates"),
+            ("extra-field", "invalid build trace spec schema"),
+        )
+        for case, error in cases:
+            with self.subTest(case=case):
+                clone = Path(self.temp.name) / f"repo-{case}"
+                shutil.copytree(
+                    ROOT, clone, ignore=shutil.ignore_patterns(".git", "__pycache__", "out"),
+                )
+                spec_path = clone / "tests/fixtures/provenance-card/validation/build.spec.json"
+                spec = json.loads(spec_path.read_text(encoding="utf-8"))
+                receipt_path = clone / "tests/fixtures/provenance-card/validation/receipts/build.json"
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                if case == "empty-command":
+                    spec["command"] = []
+                    receipt["command"] = []
+                elif case == "zero-timeout":
+                    spec["timeout_seconds"] = 0
+                    receipt["timeout_seconds"] = 0
+                elif case == "duplicate-input":
+                    spec["inputs"].append(spec["inputs"][0])
+                    receipt["inputs_before"].append(receipt["inputs_before"][0])
+                    receipt["inputs_after"].append(receipt["inputs_after"][0])
+                else:
+                    spec["unexpected"] = "forged extension"
+                spec_bytes = json.dumps(spec).encode("utf-8")
+                spec_path.write_bytes(spec_bytes)
+                receipt["spec"] = {
+                    "path": "tests/fixtures/provenance-card/validation/build.spec.json",
+                    **verify_trace_receipts.identity(spec_bytes),
+                }
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, error):
+                    verify_trace_receipts.verify(clone, self.generated, names=("build",))
+
     def test_changed_generated_bytes_fail(self) -> None:
         card = self.generated / "card.svg"
         card.write_bytes(card.read_bytes() + b"changed")

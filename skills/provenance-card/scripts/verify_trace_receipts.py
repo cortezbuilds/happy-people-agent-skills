@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 import re
 import sys
 
+import trace_build
+
 
 VALIDATION = Path("tests/fixtures/provenance-card/validation")
 OUT_PREFIX = "tests/fixtures/provenance-card/out/"
@@ -84,13 +86,18 @@ def check_snapshot(actual: object, expected: list[dict], label: str) -> None:
     require(actual == expected, f"{label} differs from current declared files")
 
 
-def load_record(root: Path, name: str, receipt_dir: Path | None) -> tuple[dict, dict]:
+def load_record(
+    root: Path, generated: Path, name: str, receipt_dir: Path | None,
+) -> tuple[dict, dict]:
     spec_name = (VALIDATION / f"{name}.spec.json").as_posix()
-    spec_bytes = (root / spec_name).read_bytes()
-    spec = json.loads(spec_bytes)
+
+    def mapped_input(path: str) -> Path | None:
+        return safe_path(root, path, generated) if path.startswith(OUT_PREFIX) else None
+
+    spec, spec_identity = trace_build.read_spec(root, spec_name, mapped_input=mapped_input)
     receipt_path = ((receipt_dir or root / VALIDATION / "receipts") / f"{name}.json")
     receipt = json.loads(receipt_path.read_bytes())
-    require(receipt.get("spec") == {"path": spec_name, **identity(spec_bytes)},
+    require(receipt.get("spec") == spec_identity,
             f"{name} receipt does not bind the current spec")
     require(receipt.get("command") == spec.get("command"),
             f"{name} receipt command differs from spec")
@@ -110,8 +117,7 @@ def verify(
     require(names and all(name in NAMES for name in names), "unknown receipt name")
 
     for name in names:
-        spec, record = load_record(root, name, receipt_dir)
-        require(spec.get("schema_version") == "build-trace-spec/1", f"{name} spec schema")
+        spec, record = load_record(root, generated, name, receipt_dir)
         require(record.get("schema_version") == "build-trace/1", f"{name} receipt schema")
         require(record.get("capture_boundary") == "controlled_subprocess_stdio_and_declared_files",
                 f"{name} capture boundary")

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 import html
@@ -11,8 +12,8 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import sys
-import tempfile
 import unicodedata
 from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
@@ -595,8 +596,18 @@ def check_input_bindings(manifest: dict, bindings: list[str]) -> tuple[int, int]
 
 def replace_bytes(path: Path, data: bytes) -> None:
     """Replace an output entry without following symlinks or existing hardlinks."""
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temporary = Path(temporary_name)
+    # mkstemp always creates mode 0600. Opening with 0666 lets the process
+    # umask set the normal mode of a generated package file.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    for _ in range(10):
+        temporary = path.with_name(f".{path.name}.{secrets.token_hex(12)}")
+        try:
+            descriptor = os.open(temporary, flags, 0o666)
+            break
+        except FileExistsError:
+            continue
+    else:
+        fail(f"could not reserve a temporary file for {path.name}")
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
@@ -607,6 +618,31 @@ def replace_bytes(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
+@contextmanager
+def reserve_build(output: Path):
+    """Allow one package writer at a time, including for an initially empty --out."""
+    reservation = output / ".provenance-card-build.lock"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(reservation, flags, 0o600)
+    except FileExistsError:
+        fail("output directory has an active or stale build reservation")
+    identity = os.fstat(descriptor)
+    try:
+        yield
+    finally:
+        try:
+            try:
+                current = reservation.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                if (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino):
+                    reservation.unlink()
+        finally:
+            os.close(descriptor)
+
+
 def build(manifest_path: Path, output: Path, force: bool, bindings: list[str]) -> None:
     manifest = load_json(manifest_path)
     files = file_map(manifest)
@@ -614,12 +650,13 @@ def build(manifest_path: Path, output: Path, force: bool, bindings: list[str]) -
     if output.is_symlink():
         fail("output directory must not be a symlink")
     output.mkdir(parents=True, exist_ok=True)
-    if not force and any(
-        (output / name).exists() or (output / name).is_symlink() for name in files
-    ):
-        fail("output files exist; choose a new directory or pass --force")
-    for name, data in files.items():
-        replace_bytes(output / name, data)
+    with reserve_build(output):
+        if not force and any(
+            (output / name).exists() or (output / name).is_symlink() for name in files
+        ):
+            fail("output files exist; choose a new directory or pass --force")
+        for name, data in files.items():
+            replace_bytes(output / name, data)
     print(f"built {output} · record {manifest_id(manifest)} · checked input bytes {checked}/{total}")
 
 
