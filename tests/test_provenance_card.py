@@ -65,6 +65,61 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_common_cjk_title_keeps_readable_wrap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = fixture("a" * 64)
+            record["title"] = "漢字" * 10
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            output = root / "card"
+            result = run("build", manifest, "--out", output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ET.parse(output / "card.svg").getroot()
+            title_lines = [node.text for node in svg.iter() if node.tag.endswith("text")
+                           and node.text and set(node.text) <= {"漢", "字"}]
+            self.assertEqual(len(title_lines), 2)
+            self.assertEqual(sum(len(line) for line in title_lines), 20)
+            self.assertEqual(run("verify", output).returncode, 0)
+
+    def test_broad_non_ascii_symbol_fits_title_claim_and_citations(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            broad = "‱"  # U+2031 occupies about 1.887 em in DejaVu Sans Bold.
+            record = fixture("a" * 64)
+            record["title"] = broad * 11
+            record["claims"][0]["text"] = broad * 37
+            record["evidence"][0]["label"] = broad * 80
+            record["stages"]["checked_main"] = {
+                "state": "verified", "evidence_ids": ["E1"],
+            }
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            output = root / "card"
+            result = run("build", manifest, "--out", output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ET.parse(output / "card.svg").getroot()
+            self.assertEqual(svg.attrib["width"], "360")
+            texts = [node for node in svg.iter() if node.tag.endswith("text") and node.text]
+            titles = [node for node in texts if set(node.text or "") == {broad}
+                      and node.attrib["font-size"] == "22"]
+            claims = [node for node in texts if set(node.text or "") == {broad}
+                      and node.attrib["font-size"] == "14"]
+            self.assertEqual(sum(len(node.text or "") for node in titles), 11)
+            self.assertEqual(sum(len(node.text or "") for node in claims), 37)
+            self.assertTrue(all(len(node.text or "") * 22 * 2.017 <= 316 for node in titles))
+            self.assertTrue(all(len(node.text or "") * 14 * 2.017 <= 296 for node in claims))
+            citations = [node for node in texts if (node.text or "").startswith("↗ E1")]
+            self.assertEqual(len(citations), 3)
+            self.assertTrue(all((node.text or "").endswith("…") for node in citations))
+            for node in citations:
+                size = int(node.attrib["font-size"])
+                available = 328 - int(node.attrib["x"]) if size == 11 else 338 - int(node.attrib["x"])
+                # Allow 60 px for the ID, arrow, spaces, and ellipsis.
+                self.assertLessEqual((node.text or "").count(broad) * size * 2.017 + 60,
+                                     available)
+            self.assertEqual(run("verify", output).returncode, 0)
+
     def test_ascii_w_fits_title_claim_and_citations_at_phone_width(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

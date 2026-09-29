@@ -17,6 +17,11 @@ OUT_PREFIX = "tests/fixtures/provenance-card/out/"
 NAMES = ("build", "verify", "tests")
 HEX = re.compile(r"^[0-9a-f]{64}$")
 UTC_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$")
+CAPTURE_SCOPE = (
+    "Linux same-process-group metadata only: declared-file hashes and captured stdio digests. "
+    "New-session/group descendants, model context, host activity, and all-process I/O "
+    "are outside this capture."
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -110,6 +115,7 @@ def verify(
         require(record.get("schema_version") == "build-trace/1", f"{name} receipt schema")
         require(record.get("capture_boundary") == "controlled_subprocess_stdio_and_declared_files",
                 f"{name} capture boundary")
+        require(record.get("scope") == CAPTURE_SCOPE, f"{name} capture scope")
         for key in ("capture_complete", "success", "input_stable",
                     "declared_outputs_present", "executable_stable", "group_quiescent"):
             require(record.get(key) is True, f"{name} {key} is not true")

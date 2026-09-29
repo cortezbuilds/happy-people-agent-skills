@@ -69,6 +69,15 @@ class SavedTraceReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "group_quiescent is not true"):
             verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
 
+    def test_overstated_capture_scope_fails(self) -> None:
+        copied = self.copy_saved_receipts()
+        path = copied / "build.json"
+        record = json.loads(path.read_text())
+        record["scope"] = "Every model and host action was captured."
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "capture scope"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
     def test_malformed_executable_digest_fails(self) -> None:
         copied = self.copy_saved_receipts()
         path = copied / "build.json"

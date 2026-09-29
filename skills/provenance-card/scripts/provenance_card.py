@@ -293,8 +293,11 @@ def manifest_id(manifest: dict) -> str:
 
 def glyph_milli_em(char: str) -> int:
     """Conservative advance budget for the SVG's sans-serif fonts."""
-    if unicodedata.combining(char) or char in {"\u200c", "\u200d"}:
+    if char in {"\u200c", "\u200d"}:
         return 0
+    if unicodedata.combining(char):
+        # A standalone combining mark can display a dotted-circle glyph.
+        return 1000
     if char == " ":
         return 450
     if char in "W":
@@ -311,7 +314,14 @@ def glyph_milli_em(char: str) -> int:
         if char.isdigit():
             return 800
         return 850 if char.islower() else 950
-    return 1200
+    # DejaVu Sans Bold's widest printable mapped glyph is about 2.017 em
+    # (U+1676). Reserve 2.25 em for other non-ASCII symbols, including U+2031.
+    # Common CJK letters use square fallback glyphs; keep them near one em.
+    # Other fallback fonts and emoji still require a visual check at phone width.
+    if (unicodedata.east_asian_width(char) in {"F", "W"}
+            and unicodedata.category(char).startswith(("L", "N"))):
+        return 1250
+    return 2250
 
 
 def fits_pixels(value: str, size: int, width_px: int) -> bool:

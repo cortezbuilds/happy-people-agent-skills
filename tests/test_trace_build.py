@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -40,6 +43,47 @@ class BuildTraceTests(unittest.TestCase):
 
     def run_trace(self) -> dict:
         return trace_build.run(self.root, "trace-spec.json", self.receipt)
+
+    def start_waiting_trace(self) -> subprocess.Popen[str]:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\n"
+            "import time\n"
+            "Path('builder-started').write_text('yes')\n"
+            "deadline = time.monotonic() + 5\n"
+            "while not Path('release-builder').exists() and time.monotonic() < deadline:\n"
+            "    time.sleep(0.01)\n"
+            "Path('output.txt').write_text('winner')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"], timeout=8)
+        command = [sys.executable, str(MODULE_PATH), "--root", str(self.root),
+                   "--spec", "trace-spec.json", "--receipt", str(self.receipt)]
+        process = subprocess.Popen(command, cwd=self.root, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+
+        def stop_if_running() -> None:
+            if process.poll() is None:
+                (self.root / "release-builder").write_text("go", encoding="utf-8")
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+
+        self.addCleanup(stop_if_running)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if (self.root / "builder-started").exists() and self.receipt.exists():
+                try:
+                    if json.loads(self.receipt.read_text(encoding="utf-8"))["status"] == "started":
+                        return process
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            if process.poll() is not None:
+                self.fail("first tracer exited before builder became ready")
+            time.sleep(0.01)
+        self.fail("first tracer did not start a builder in time")
 
     def test_success_records_only_metadata_and_exact_digests(self) -> None:
         (self.root / "input.txt").write_bytes(b"SYNTHETIC PRIVATE-LIKE INPUT")
@@ -283,7 +327,7 @@ class BuildTraceTests(unittest.TestCase):
         (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
         (self.root / "input.txt").write_text("original", encoding="utf-8")
         self.write_spec(["python3", "builder.py"])
-        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+        with mock.patch.object(trace_build, "ReceiptReservation", side_effect=AssertionError("reserved receipt")):
             with self.assertRaisesRegex(ValueError, "receipt aliases declared input"):
                 trace_build.run(self.root, "trace-spec.json", self.root / "input.txt")
         self.assertEqual((self.root / "input.txt").read_text(encoding="utf-8"), "original")
@@ -295,7 +339,7 @@ class BuildTraceTests(unittest.TestCase):
         self.write_spec(["python3", "builder.py"])
         spec_path = self.root / "trace-spec.json"
         original = spec_path.read_bytes()
-        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+        with mock.patch.object(trace_build, "ReceiptReservation", side_effect=AssertionError("reserved receipt")):
             with self.assertRaisesRegex(ValueError, "receipt aliases declared trace spec"):
                 trace_build.run(self.root, "trace-spec.json", spec_path)
         self.assertEqual(spec_path.read_bytes(), original)
@@ -307,7 +351,7 @@ class BuildTraceTests(unittest.TestCase):
         )
         (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
         self.write_spec(["python3", "builder.py"])
-        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+        with mock.patch.object(trace_build, "ReceiptReservation", side_effect=AssertionError("reserved receipt")):
             with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
                 trace_build.run(self.root, "trace-spec.json", self.root / "output.txt")
         self.assertFalse((self.root / "output.txt").exists())
@@ -318,7 +362,7 @@ class BuildTraceTests(unittest.TestCase):
         self.write_spec(["python3", "builder.py"])
         alias = self.root / "receipt-link.json"
         alias.symlink_to("output.txt")
-        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+        with mock.patch.object(trace_build, "ReceiptReservation", side_effect=AssertionError("reserved receipt")):
             with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
                 trace_build.run(self.root, "trace-spec.json", alias)
         self.assertTrue(alias.is_symlink())
@@ -330,7 +374,7 @@ class BuildTraceTests(unittest.TestCase):
         self.write_spec(["python3", "builder.py"])
         output = self.root / "output.txt"
         output.symlink_to("trace.json")
-        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+        with mock.patch.object(trace_build, "ReceiptReservation", side_effect=AssertionError("reserved receipt")):
             with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
                 self.run_trace()
         self.assertTrue(output.is_symlink())
@@ -369,7 +413,7 @@ class BuildTraceTests(unittest.TestCase):
             self.run_trace()
         self.assertEqual(self.receipt.read_text(encoding="utf-8"), "existing")
 
-    def test_existing_receipt_temp_input_is_preserved_on_exclusive_create_failure(self) -> None:
+    def test_existing_old_temp_input_is_not_used_or_modified(self) -> None:
         (self.root / "builder.py").write_text(
             "from pathlib import Path\nPath('output.txt').write_text('ran')\n",
             encoding="utf-8",
@@ -381,12 +425,74 @@ class BuildTraceTests(unittest.TestCase):
         self.write_spec(["python3", "builder.py"],
                         inputs=["builder.py", "input.txt", temporary.name])
 
-        with self.assertRaises(FileExistsError):
-            self.run_trace()
+        result = self.run_trace()
 
+        self.assertTrue(result["success"])
         self.assertEqual(temporary.read_bytes(), protected)
-        self.assertFalse(self.receipt.exists())
-        self.assertFalse((self.root / "output.txt").exists())
+        self.assertTrue(self.receipt.exists())
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), "ran")
+
+    def test_competing_tracer_cannot_overwrite_active_receipt(self) -> None:
+        winner = self.start_waiting_trace()
+        started = self.receipt.read_bytes()
+        loser = subprocess.run(
+            [sys.executable, str(MODULE_PATH), "--root", str(self.root),
+             "--spec", "trace-spec.json", "--receipt", str(self.receipt)],
+            cwd=self.root, capture_output=True, text=True, timeout=5,
+        )
+        self.assertEqual(loser.returncode, 2)
+        self.assertIn("receipt already exists", loser.stderr)
+        self.assertEqual(self.receipt.read_bytes(), started)
+
+        (self.root / "release-builder").write_text("go", encoding="utf-8")
+        winner_stdout, winner_stderr = winner.communicate(timeout=10)
+        self.assertEqual(winner.returncode, 0, (winner_stdout, winner_stderr))
+        self.assertTrue(json.loads(self.receipt.read_text(encoding="utf-8"))["success"])
+
+    def test_two_tracers_passing_preflight_race_on_exclusive_create(self) -> None:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\nPath('output.txt').write_text('winner')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        barrier = threading.Barrier(2)
+        original_init = trace_build.ReceiptReservation.__init__
+
+        def reserve_together(instance: object, path: Path) -> None:
+            # Reaching the constructor means both callers passed the initial
+            # exists check. The exclusive create must still select one owner.
+            barrier.wait(timeout=5)
+            original_init(instance, path)
+
+        outcomes: list[tuple[str, object]] = []
+        with mock.patch.object(trace_build.ReceiptReservation, "__init__", reserve_together):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(self.run_trace) for _ in range(2)]
+                for future in futures:
+                    try:
+                        outcomes.append(("ok", future.result(timeout=10)))
+                    except ValueError as exc:
+                        outcomes.append(("error", str(exc)))
+
+        self.assertEqual([kind for kind, _ in outcomes].count("ok"), 1)
+        self.assertEqual([kind for kind, _ in outcomes].count("error"), 1)
+        self.assertIn("receipt already exists", next(value for kind, value in outcomes if kind == "error"))
+        self.assertTrue(json.loads(self.receipt.read_text(encoding="utf-8"))["success"])
+
+    def test_replaced_receipt_path_is_not_overwritten(self) -> None:
+        process = self.start_waiting_trace()
+        original = self.root / "reserved-original.json"
+        self.receipt.rename(original)
+        unrelated = "UNRELATED FILE; DO NOT REPLACE"
+        self.receipt.write_text(unrelated, encoding="utf-8")
+        (self.root / "release-builder").write_text("go", encoding="utf-8")
+
+        stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(process.returncode, 2, (stdout, stderr))
+        self.assertIn("receipt reservation was replaced", stderr)
+        self.assertEqual(self.receipt.read_text(encoding="utf-8"), unrelated)
+        self.assertEqual(json.loads(original.read_text(encoding="utf-8"))["status"], "started")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 142938219,
+  "duration_monotonic_ns": 110108937,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -26,17 +26,17 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T13:39:33.378330+00:00",
-  "finished_monotonic_ns": 66749492077682,
+  "finished_at_utc": "2026-09-29T13:49:27.445414+00:00",
+  "finished_monotonic_ns": 67343559164395,
   "group_observation": "linux_procfs_waitid_wnowait",
   "group_quiescent": true,
   "input_stable": true,
   "inputs_after": [
     {
-      "bytes": 28292,
+      "bytes": 28845,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
+      "sha256": "8366fbc63dbdeef7ecbe1fa7bec9aba1ca29c37ba14aab7ad8cc3d8e46e427ab"
     },
     {
       "bytes": 7290,
@@ -77,10 +77,10 @@
   ],
   "inputs_before": [
     {
-      "bytes": 28292,
+      "bytes": 28845,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
+      "sha256": "8366fbc63dbdeef7ecbe1fa7bec9aba1ca29c37ba14aab7ad8cc3d8e46e427ab"
     },
     {
       "bytes": 7290,
@@ -129,8 +129,8 @@
     "path": "tests/fixtures/provenance-card/validation/verify.spec.json",
     "sha256": "f67f47d2f8d358c648cbaf7e6c95904ce2b35bda981f8eb0650e9741c06ae9fb"
   },
-  "started_at_utc": "2026-09-29T13:39:33.235370+00:00",
-  "started_monotonic_ns": 66749349139463,
+  "started_at_utc": "2026-09-29T13:49:27.335290+00:00",
+  "started_monotonic_ns": 67343449055458,
   "status": "completed",
   "stderr": {
     "bytes": 0,

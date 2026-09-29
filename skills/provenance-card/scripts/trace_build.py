@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -125,37 +126,64 @@ def read_spec(root: Path, spec_name: str) -> tuple[dict[str, Any], dict[str, Any
     return spec, {"path": spec_name, **sha256_bytes(raw)}
 
 
-def write_atomic(path: Path, value: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode()
-    temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
-    owned_identity: tuple[int, int] | None = None
-    replaced = False
-    try:
-        with temporary.open("xb") as stream:
-            created = os.fstat(stream.fileno())
-            owned_identity = (created.st_dev, created.st_ino)
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        replaced = True
-        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+class ReceiptReservation:
+    """Exclusively create and update one owned receipt inode.
+
+    Updates are in place, so a failed write may leave an incomplete JSON file.
+    They never replace an unrelated path created by another process.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
         try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    finally:
-        # Exclusive creation may have failed because this name already belongs
-        # to a declared input. Never clean up a file this call did not create.
-        if owned_identity is not None and not replaced:
+            self.fd = os.open(self.path, flags, 0o600)
+        except FileExistsError as exc:
+            raise ValueError("receipt already exists; use a new path for each run") from exc
+        created = os.fstat(self.fd)
+        self.identity = (created.st_dev, created.st_ino)
+        self.directory_synced = False
+
+    def __enter__(self) -> ReceiptReservation:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        os.close(self.fd)
+
+    def assert_owned(self) -> None:
+        try:
+            current = self.path.lstat()
+        except FileNotFoundError as exc:
+            raise ValueError("receipt reservation path disappeared") from exc
+        held = os.fstat(self.fd)
+        if ((current.st_dev, current.st_ino) != self.identity or
+                (held.st_dev, held.st_ino) != self.identity or
+                not stat.S_ISREG(current.st_mode) or held.st_nlink != 1):
+            raise ValueError("receipt reservation was replaced or hardlinked")
+
+    def write(self, value: dict[str, Any]) -> None:
+        encoded = (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode()
+        self.assert_owned()
+        os.ftruncate(self.fd, 0)
+        os.lseek(self.fd, 0, os.SEEK_SET)
+        offset = 0
+        while offset < len(encoded):
+            written = os.write(self.fd, encoded[offset:])
+            if written <= 0:
+                raise OSError("receipt write returned no bytes")
+            offset += written
+        os.fsync(self.fd)
+        if not self.directory_synced:
+            directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
             try:
-                current = temporary.lstat()
-            except FileNotFoundError:
-                pass
-            else:
-                if (current.st_dev, current.st_ino) == owned_identity:
-                    temporary.unlink(missing_ok=True)
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+            self.directory_synced = True
+        self.assert_owned()
 
 
 class StreamDigest:
@@ -391,12 +419,21 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("root must be a directory")
+    receipt_path = Path(os.path.abspath(receipt_path))
     spec, spec_identity = read_spec(root, spec_name)
     ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
     if receipt_path.exists() or receipt_path.is_symlink():
         raise ValueError("receipt already exists; use a new path for each run")
     inputs_before = [file_state(root, name) for name in spec["inputs"]]
     outputs_before = [file_state(root, name) for name in spec["outputs"]]
+    with ReceiptReservation(receipt_path) as reservation:
+        return _run_reserved(root, spec_name, spec, spec_identity, receipt_path,
+                             reservation, inputs_before, outputs_before)
+
+
+def _run_reserved(root: Path, spec_name: str, spec: dict[str, Any], spec_identity: dict[str, Any],
+                  receipt_path: Path, reservation: ReceiptReservation,
+                  inputs_before: list[dict[str, Any]], outputs_before: list[dict[str, Any]]) -> dict[str, Any]:
     start_utc = utc_now()
     start_mono = time.monotonic_ns()
     record: dict[str, Any] = {
@@ -416,7 +453,7 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
         "capture_complete": False,
     }
     ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
-    write_atomic(receipt_path, record)
+    reservation.write(record)
     result = execute(root, spec["command"], spec["timeout_seconds"])
     if not result["group_quiescent"]:
         inputs_after, outputs_after = [], []
@@ -464,7 +501,7 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
                  ("nonzero_exit" if result["exit_code"] != 0 else None),
     })
     ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
-    write_atomic(receipt_path, record)
+    reservation.write(record)
     return record
 
 
