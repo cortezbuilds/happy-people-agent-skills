@@ -32,6 +32,9 @@ KINDS = {"text", "image", "audio", "transcript", "other"}
 PINS = {"immutable", "mutable", "local"}
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+UTC_DATETIME = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$"
+)
 
 
 def fail(message: str) -> None:
@@ -124,12 +127,14 @@ def check_sha(value: object, name: str) -> str:
 
 def timestamp(value: object, name: str) -> str:
     value = string(value, name, 40)
-    if not value.endswith("Z"):
-        fail(f"{name} must use an ISO 8601 UTC timestamp ending in Z")
+    if not UTC_DATETIME.fullmatch(value):
+        fail(f"{name} must use an ISO 8601 UTC date-time with seconds ending in Z")
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError:
         fail(f"{name} must be a valid ISO 8601 UTC timestamp")
+    if parsed.tzinfo is None or parsed.utcoffset().total_seconds() != 0:
+        fail(f"{name} must be a UTC-aware date-time")
     return value
 
 

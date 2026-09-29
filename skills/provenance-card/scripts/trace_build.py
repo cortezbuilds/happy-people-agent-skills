@@ -25,6 +25,7 @@ from typing import Any
 SCHEMA = "build-trace/1"
 SPEC_SCHEMA = "build-trace-spec/1"
 CHUNK = 1024 * 1024
+TERMINATION_GRACE_SECONDS = 2.0
 
 
 def utc_now() -> str:
@@ -55,7 +56,9 @@ def resolve_executable(root: Path, program: str) -> Path | None:
         if located is None:
             return None
         candidate = Path(located)
-    candidate = candidate.resolve(strict=False)
+    # Keep the invocation name: multi-call executables can dispatch on argv[0].
+    # Opening this path for hashing still follows the symlink to its target.
+    candidate = Path(os.path.abspath(candidate))
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
         return None
     return candidate
@@ -197,12 +200,18 @@ def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        os.killpg(process.pid, signal.SIGTERM)
         try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        # Do not reap the leader before signaling the group again: its PID
+        # keeps the group ID from being recycled while descendants get grace.
+        time.sleep(TERMINATION_GRACE_SECONDS)
+        try:
             os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
+        except ProcessLookupError:
+            pass
+        process.wait()
     try:
         executable_after = sha256_file(executable)
         executable_stable = executable_after == executable_before

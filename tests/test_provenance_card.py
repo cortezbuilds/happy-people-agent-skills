@@ -64,6 +64,24 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_timestamps_require_utc_time_component(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = fixture("a" * 64)
+            manifest = root / "bad-time.json"
+            record["as_of"] = "2026-01-01Z"
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+            result = run("build", manifest, "--out", root / "card")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("UTC date-time with seconds", result.stderr)
+
+            record["as_of"] = "2026-01-01T12:00:00Z"
+            record["evidence"][0]["observed_at"] = "2026-01-01Z"
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+            result = run("build", manifest, "--out", root / "card")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("UTC date-time with seconds", result.stderr)
+
     def test_derivation_references_only_earlier_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

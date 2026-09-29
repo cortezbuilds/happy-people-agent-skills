@@ -5,7 +5,9 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -86,7 +88,7 @@ class BuildTraceTests(unittest.TestCase):
         python_binary = Path(shutil.which("python3") or "").resolve()
 
         def fail_executable_hash(path: Path) -> dict:
-            if path == python_binary:
+            if path.resolve() == python_binary:
                 raise OSError("synthetic hash failure")
             return original(path)
 
@@ -136,6 +138,51 @@ class BuildTraceTests(unittest.TestCase):
         self.assertFalse(result["capture_complete"])
         self.assertFalse(result["success"])
         self.assertEqual(result["error"], "timeout")
+
+    def test_timeout_kills_child_when_leader_exits_on_term(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\n"
+            "import signal, subprocess, sys, time\n"
+            "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+            "subprocess.Popen([sys.executable, 'child.py'])\n"
+            "while not Path('child-started').exists(): time.sleep(0.005)\n"
+            "while True: time.sleep(0.1)\n",
+            encoding="utf-8",
+        )
+        (self.root / "child.py").write_text(
+            "from pathlib import Path\n"
+            "import signal, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "Path('child-started').write_text('yes')\n"
+            "time.sleep(0.8)\n"
+            "Path('late-write').write_text('child survived')\n",
+            encoding="utf-8",
+        )
+        self.write_spec(["python3", "builder.py"], timeout=0.15)
+        with mock.patch.object(trace_build, "TERMINATION_GRACE_SECONDS", 0.15):
+            result = self.run_trace()
+        self.assertTrue(result["timed_out"])
+        self.assertTrue((self.root / "child-started").is_file())
+        time.sleep(0.7)
+        self.assertFalse((self.root / "late-write").exists())
+
+    def test_symlink_invocation_preserves_selected_basename(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        program = self.root / "builder.py"
+        program.write_text(
+            "#!" + sys.executable + "\n"
+            "from pathlib import Path\n"
+            "import sys\n"
+            "Path('output.txt').write_text(Path(sys.argv[0]).name)\n",
+            encoding="utf-8",
+        )
+        program.chmod(0o755)
+        (self.root / "selected-name").symlink_to(program)
+        self.write_spec(["./selected-name"])
+        result = self.run_trace()
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(), "selected-name")
 
     def test_paths_cannot_escape_root(self) -> None:
         (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
