@@ -15,7 +15,7 @@ One narrow finding, affected surface, and demonstrated effect.
 Record target and program authorization, the allowed methods and scope, and the source and date of that decision. Separately state which fixtures or test accounts the researcher controls. Ownership of an account or fixture does not authorize testing the vendor service.
 
 ## Steps to reproduce
-1. Use a never-valid synthetic fixture. Replaying a formerly real secret is an exception requiring confirmed retirement and separate approval for the exact destination.
+1. Use a never-valid synthetic fixture. Replaying a formerly real secret is an exception requiring confirmed retirement, explicit target and method authorization, separate approval for the exact destination, and an updated active run contract with `real_secrets_allowed: true` before the replay.
 2. Record the exact action and input surface.
 3. Record the observed output without unnecessary sensitive values.
 

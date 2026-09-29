@@ -49,7 +49,7 @@ For agent-assisted credential studies, use [references/ai-credential-evaluation.
 
 ### 5. Reproduce minimally and honestly
 
-Prefer never-valid synthetic fixtures and isolated environments. An exact replay of a formerly real secret requires confirmation that it is retired and separate approval of the specific destination. The operator handles the exact value locally; the documentation worker does not receive it.
+Prefer never-valid synthetic fixtures and isolated environments. An exact replay of a formerly real secret requires confirmation that it is retired, authorization for the target and method, separate approval of the specific destination, and an updated active run contract setting `real_secrets_allowed: true`. The operator handles the exact value locally; the documentation worker does not receive it.
 
 Keep the observed chronology, full replay, and reduced reproducer distinct. Do not move a warning next to a paste and call that the original interaction. Do not feed the suspected failure and desired conclusion into the test conversation.
 
