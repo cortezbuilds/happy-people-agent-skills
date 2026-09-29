@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Evidence"
+  short_description: "Verify visual value, freshness, and release claims"
+  default_prompt: "Use $release-evidence to assess this visual and verify what is publicly shipped."

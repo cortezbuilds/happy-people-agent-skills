@@ -7,6 +7,7 @@ Small, optional skills shared as source-available software for community use. Th
 - **Intent Stewardship** — preserves the user's outcome, constraints, authority, and acceptance criteria while work is delegated across agents, tools, and repositories.
 - **OSS Contribution Scout** — turns verified lessons into proportionate upstream contributions. It now requires a minimal reproducer, a plausible affected-user context, and an explicit value-versus-cost/side-track decision.
 - **Privacy Exposure Scout** — notices concrete unintended exposure during ordinary work, records the class without repeating the value, proposes proportionate mitigation, and returns to the main task.
+- **Release Evidence** — checks whether a visual explains verified behavior and can stay current, then distinguishes locally prepared work from files visible on public `main` and content observed in production.
 
 The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
@@ -17,6 +18,19 @@ The skills are portable Markdown packages. They do not depend on Notion, a hoste
 3. Optional work must remain cheap in user attention and agent budget.
 4. External publication, remediation, identity changes, uploads, and destructive actions retain their own approval gates.
 5. Every finished action gets a non-sensitive verification check.
+
+## Checking visual release claims
+
+Use [Release Evidence](skills/release-evidence/SKILL.md) when a README diagram, icon, or screenshot is proposed. First ask what it helps a reader understand and what implementation change would make it stale. If prose works better or no one can keep the visual current, leave it out.
+
+For example, a changed diagram in `README.md` is **prepared** while it exists only locally, in a build, or in a pull request. After publication, check the exact file from unauthenticated public `main`:
+
+```sh
+python3 skills/release-evidence/scripts/verify_public_main.py \
+  --repo cortezbuilds/happy-people-agent-skills --root . --file README.md
+```
+
+Only a `verified_public_main` result supports saying that diagram is on **public main**. A website change needs its own production URL readback before calling it **production**. A `not_on_public_main` or `inconclusive` result leaves the claim at **prepared** until the relevant surface is verified.
 
 ## Install locally
 
