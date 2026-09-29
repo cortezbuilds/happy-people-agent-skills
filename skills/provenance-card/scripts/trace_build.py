@@ -80,7 +80,9 @@ def resolve_executable(root: Path, program: str) -> tuple[Path, str] | None:
         candidate = Path(located)
         invocation = None
         for entry in path_entries:
-            path = f"{entry}/{program}" if entry else program
+            # execvpe joins each PATH entry with the program. In particular,
+            # a trailing slash is not an extra slash in the shebang argv[0].
+            path = os.path.join(entry, program)
             test_path = Path(path) if os.path.isabs(path) else root / path
             if test_path == candidate:
                 invocation = path

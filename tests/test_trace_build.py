@@ -340,6 +340,34 @@ class BuildTraceTests(unittest.TestCase):
                          hashlib.sha256(direct.stdout.encode()).hexdigest())
         self.assertEqual(result["executable"], trace_build.sha256_file(program))
 
+    def test_trailing_slash_path_entry_matches_direct_shebang_argv_zero(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        program = self.root / "bin" / "builder"
+        program.parent.mkdir()
+        program.write_text(
+            f"#!{sys.executable}\n"
+            "from pathlib import Path\n"
+            "import sys\n"
+            "Path('output.txt').write_text(sys.argv[0])\n"
+            "print(sys.argv[0])\n",
+            encoding="utf-8",
+        )
+        program.chmod(0o755)
+        self.write_spec(["builder"], inputs=["bin/builder", "input.txt"])
+        with mock.patch.dict(os.environ, {"PATH": "bin/"}):
+            direct = subprocess.run(["builder"], cwd=self.root,
+                                    capture_output=True, text=True)
+            self.assertEqual(direct.returncode, 0, direct.stderr)
+            expected = (self.root / "output.txt").read_text(encoding="utf-8")
+            (self.root / "output.txt").unlink()
+            result = self.run_trace()
+        self.assertEqual(expected, "bin/builder")
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), expected)
+        self.assertEqual(result["stdout"]["sha256"],
+                         hashlib.sha256(direct.stdout.encode()).hexdigest())
+        self.assertEqual(result["executable"], trace_build.sha256_file(program))
+
     def test_symlink_parent_component_hashes_executed_file(self) -> None:
         (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
         (self.root / "deep" / "inner").mkdir(parents=True)

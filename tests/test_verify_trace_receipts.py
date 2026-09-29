@@ -60,6 +60,17 @@ class SavedTraceReceiptTests(unittest.TestCase):
                             ROOT, self.generated, copied, ("build", "verify")
                         )
 
+    def test_duplicate_receipt_key_is_rejected_before_validation(self) -> None:
+        copied = self.copy_saved_receipts()
+        path = copied / "build.json"
+        raw = path.read_text(encoding="utf-8")
+        self.assertEqual(raw.count('"root": "."'), 1)
+        path.write_text(raw.replace('"root": "."',
+                                    '"root": "../forged", "root": "."'),
+                        encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "duplicate JSON key: root"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build",))
+
     def test_forged_matching_spec_digests_do_not_bypass_trace_schema(self) -> None:
         cases = (
             ("empty-command", "command must be a nonempty"),

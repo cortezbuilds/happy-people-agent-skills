@@ -96,7 +96,8 @@ def load_record(
 
     spec, spec_identity = trace_build.read_spec(root, spec_name, mapped_input=mapped_input)
     receipt_path = ((receipt_dir or root / VALIDATION / "receipts") / f"{name}.json")
-    receipt = json.loads(receipt_path.read_bytes())
+    receipt = json.loads(receipt_path.read_bytes(),
+                         object_pairs_hook=trace_build.reject_duplicate_keys)
     require(receipt.get("spec") == spec_identity,
             f"{name} receipt does not bind the current spec")
     require(receipt.get("command") == spec.get("command"),

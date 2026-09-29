@@ -16,7 +16,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 132995360,
+  "duration_monotonic_ns": 163316789,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -28,8 +28,8 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T14:24:26.339661+00:00",
-  "finished_monotonic_ns": 69442453410988,
+  "finished_at_utc": "2026-09-29T14:34:09.644598+00:00",
+  "finished_monotonic_ns": 70025758340534,
   "group_observation": "linux_procfs_waitid_wnowait",
   "group_quiescent": true,
   "input_stable": true,
@@ -137,8 +137,8 @@
     "path": "tests/fixtures/provenance-card/validation/build.spec.json",
     "sha256": "07256b164727cfaea6184d2a5ab57256a42c1975187675ec7fb50f37e167900b"
   },
-  "started_at_utc": "2026-09-29T14:24:26.206651+00:00",
-  "started_monotonic_ns": 69442320415628,
+  "started_at_utc": "2026-09-29T14:34:09.481258+00:00",
+  "started_monotonic_ns": 70025595023745,
   "status": "completed",
   "stderr": {
     "bytes": 0,
