@@ -1,0 +1,4 @@
+interface:
+  display_name: "Provenance Card"
+  short_description: "Build a linked SVG evidence card and local receipt"
+  default_prompt: "Use $provenance-card to turn this decision or artifact into a source-linked card and verify the saved package."

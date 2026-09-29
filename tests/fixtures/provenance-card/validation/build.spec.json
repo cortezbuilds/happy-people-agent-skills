@@ -1,0 +1,23 @@
+{
+  "schema_version": "build-trace-spec/1",
+  "command": [
+    "python3", "skills/provenance-card/scripts/provenance_card.py", "build",
+    "tests/fixtures/provenance-card/manifest.json",
+    "--out", "tests/fixtures/provenance-card/out",
+    "--input", "I1=tests/fixtures/provenance-card/base-readme.md",
+    "--input", "I2=tests/fixtures/provenance-card/branch-readme.md"
+  ],
+  "inputs": [
+    "skills/provenance-card/scripts/provenance_card.py",
+    "tests/fixtures/provenance-card/manifest.json",
+    "tests/fixtures/provenance-card/base-readme.md",
+    "tests/fixtures/provenance-card/branch-readme.md"
+  ],
+  "outputs": [
+    "tests/fixtures/provenance-card/out/manifest.json",
+    "tests/fixtures/provenance-card/out/card.svg",
+    "tests/fixtures/provenance-card/out/sources.md",
+    "tests/fixtures/provenance-card/out/receipt.json"
+  ],
+  "timeout_seconds": 30
+}
