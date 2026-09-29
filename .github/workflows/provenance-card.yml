@@ -7,6 +7,7 @@ on:
       - skills/provenance-card/**
       - tests/test_provenance_card.py
       - tests/test_trace_build.py
+      - tests/test_verify_trace_receipts.py
       - tests/fixtures/provenance-card/**
 
 permissions:
@@ -37,3 +38,8 @@ jobs:
             "$RUNNER_TEMP/provenance-card-fixture" \
             --input I1=tests/fixtures/provenance-card/base-readme.md \
             --input I2=tests/fixtures/provenance-card/branch-readme.md
+      - name: Check saved trace receipts against fresh fixture bytes
+        run: |
+          python3 skills/provenance-card/scripts/verify_trace_receipts.py \
+            --root . \
+            --generated-dir "$RUNNER_TEMP/provenance-card-fixture"

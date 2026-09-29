@@ -13,7 +13,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 85217027,
+  "duration_monotonic_ns": 119625569,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -25,8 +25,8 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T12:49:21.418682+00:00",
-  "finished_monotonic_ns": 63737532432074,
+  "finished_at_utc": "2026-09-29T12:54:23.313036+00:00",
+  "finished_monotonic_ns": 64039426786451,
   "input_stable": true,
   "inputs_after": [
     {
@@ -126,8 +126,8 @@
     "path": "tests/fixtures/provenance-card/validation/verify.spec.json",
     "sha256": "f67f47d2f8d358c648cbaf7e6c95904ce2b35bda981f8eb0650e9741c06ae9fb"
   },
-  "started_at_utc": "2026-09-29T12:49:21.333450+00:00",
-  "started_monotonic_ns": 63737447215047,
+  "started_at_utc": "2026-09-29T12:54:23.193393+00:00",
+  "started_monotonic_ns": 64039307160882,
   "status": "completed",
   "stderr": {
     "bytes": 0,

@@ -12,7 +12,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 1567371354,
+  "duration_monotonic_ns": 1824080316,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -24,8 +24,8 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T12:49:23.362123+00:00",
-  "finished_monotonic_ns": 63739475872019,
+  "finished_at_utc": "2026-09-29T12:54:25.844449+00:00",
+  "finished_monotonic_ns": 64041958197116,
   "input_stable": true,
   "inputs_after": [
     {
@@ -59,6 +59,12 @@
       "sha256": "a41e6e5252603b1fb562c50aeeccdd4dfd9fbc5122ff2ec172a47abdf29e9e55"
     },
     {
+      "bytes": 6262,
+      "exists": true,
+      "path": "skills/provenance-card/scripts/verify_trace_receipts.py",
+      "sha256": "b17c16ab76111f18ffa9a0a696f9ba931c6c2b581abf02fcfa46612c4b74889c"
+    },
+    {
       "bytes": 4936,
       "exists": true,
       "path": "skills/release-evidence/scripts/verify_public_main.py",
@@ -75,6 +81,12 @@
       "exists": true,
       "path": "tests/test_trace_build.py",
       "sha256": "634c2a1723d2d8e691509650dbb4c800de1c340c1ba09e0df56256c2c587fea3"
+    },
+    {
+      "bytes": 2301,
+      "exists": true,
+      "path": "tests/test_verify_trace_receipts.py",
+      "sha256": "74b28266a585c38a4e4e38e8c67f69e61f6a3832559a725b4ea1189d5a7e606c"
     },
     {
       "bytes": 3953,
@@ -157,6 +169,12 @@
       "sha256": "a41e6e5252603b1fb562c50aeeccdd4dfd9fbc5122ff2ec172a47abdf29e9e55"
     },
     {
+      "bytes": 6262,
+      "exists": true,
+      "path": "skills/provenance-card/scripts/verify_trace_receipts.py",
+      "sha256": "b17c16ab76111f18ffa9a0a696f9ba931c6c2b581abf02fcfa46612c4b74889c"
+    },
+    {
       "bytes": 4936,
       "exists": true,
       "path": "skills/release-evidence/scripts/verify_public_main.py",
@@ -173,6 +191,12 @@
       "exists": true,
       "path": "tests/test_trace_build.py",
       "sha256": "634c2a1723d2d8e691509650dbb4c800de1c340c1ba09e0df56256c2c587fea3"
+    },
+    {
+      "bytes": 2301,
+      "exists": true,
+      "path": "tests/test_verify_trace_receipts.py",
+      "sha256": "74b28266a585c38a4e4e38e8c67f69e61f6a3832559a725b4ea1189d5a7e606c"
     },
     {
       "bytes": 3953,
@@ -229,24 +253,24 @@
   "schema_version": "build-trace/1",
   "scope": "Metadata only. Pre/post declared-file hashes and captured stdio digests; not model, host, or all-process I/O capture.",
   "spec": {
-    "bytes": 979,
+    "bytes": 1085,
     "path": "tests/fixtures/provenance-card/validation/tests.spec.json",
-    "sha256": "1a085c37560fc5a948384afbbc063287661ffd5357820ed6841a73f760899921"
+    "sha256": "2d312aef7930c2876b14ac609877411f9cfa85caa57ecc21dcb1e136ee447564"
   },
-  "started_at_utc": "2026-09-29T12:49:21.794737+00:00",
-  "started_monotonic_ns": 63737908500665,
+  "started_at_utc": "2026-09-29T12:54:24.020348+00:00",
+  "started_monotonic_ns": 64040134116800,
   "status": "completed",
   "stderr": {
-    "bytes": 2747,
+    "bytes": 3136,
     "complete": true,
     "error": null,
-    "sha256": "6661b95369198a2576ae377e1364c6abed3503ddc97470cd5e535ba6f56430a7"
+    "sha256": "d2d73c9bd8b9c2bc57df934040f6b21b49382c339337c4aaf57a730cc793f408"
   },
   "stdout": {
-    "bytes": 0,
+    "bytes": 203,
     "complete": true,
     "error": null,
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "sha256": "feac31299dbfdb3b1575b849d882683483beb18324b8e3b915700417445007b3"
   },
   "success": true,
   "timed_out": false,
