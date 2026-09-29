@@ -1,0 +1,16 @@
+outcome: ""
+target: ""
+authority_basis: ""
+allowed_methods: []
+forbidden_methods: []
+time_limit_minutes: 0
+paid_api_budget: 0
+external_writes_allowed: false
+publication_allowed: false
+real_secrets_allowed: false
+stop_conditions:
+  - unexpected_sensitive_data
+  - service_impact
+  - scope_uncertainty
+  - budget_exhausted
+notes: ""
