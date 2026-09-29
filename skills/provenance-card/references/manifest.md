@@ -49,7 +49,9 @@ For a public card, replace synthetic entries with checked evidence. A source URL
 
 The bundled trace_build.py runs one declared subprocess and writes a metadata-only receipt. A spec lists its command, repo-relative input files, expected output files, and timeout. Start with a fresh output directory and a new receipt path for each run. The public-safe build, verify, and test examples are in tests/fixtures/provenance-card/validation. To run a prepared spec:
 
-    python3 skills/provenance-card/scripts/trace_build.py --root . --spec path/to/spec.json --receipt path/to/new-trace.json
+    python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/trace_build.py" --root . --spec path/to/spec.json --receipt path/to/new-trace.json
+
+Set `PROVENANCE_CARD_SKILL_DIR` to the absolute folder containing this skill's `SKILL.md`, as in the main skill instructions. The fixture specs above belong to the source repository and are not included when only the skill folder is installed. For another project, write a spec under its root and declare all relevant source files there; the tracer can only hash declared inputs within `--root`.
 
 This optional tracer requires Linux procfs and `waitid` with `WNOWAIT` so it can keep the leader's process-group ID pinned, observe live same-group descendants, and clean them up before final file snapshots. It fails closed when it cannot observe group quiescence. A descendant that creates a new process group or session is outside this boundary; use a stronger host or container boundary if that case matters.
 

@@ -14,7 +14,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 120165434,
+  "duration_monotonic_ns": 144083974,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -26,17 +26,17 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T13:20:29.199120+00:00",
-  "finished_monotonic_ns": 65605312868794,
+  "finished_at_utc": "2026-09-29T13:34:50.183869+00:00",
+  "finished_monotonic_ns": 66466297617795,
   "group_observation": "linux_procfs_waitid_wnowait",
   "group_quiescent": true,
   "input_stable": true,
   "inputs_after": [
     {
-      "bytes": 27771,
+      "bytes": 28292,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "56df9333d28f784ec556b6e245e484d4a286bea2273b63803bf6e5f58db37ca3"
+      "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
     },
     {
       "bytes": 7290,
@@ -57,10 +57,10 @@
       "sha256": "c762c9d46bf80dee1dbf1fb0ba5f827d5dfac8cc55f4f3287aa8963f1257cf44"
     },
     {
-      "bytes": 5929,
+      "bytes": 6504,
       "exists": true,
       "path": "tests/fixtures/provenance-card/out/card.svg",
-      "sha256": "5e408cc081529829310ea513e8154c15bab777dee8264d4284eedaea77eb229a"
+      "sha256": "ee4fbcbfc085b08a82807624ab49b9031ee0fdf82d4009cdf93dbcad1f3bd965"
     },
     {
       "bytes": 2601,
@@ -72,15 +72,15 @@
       "bytes": 450,
       "exists": true,
       "path": "tests/fixtures/provenance-card/out/receipt.json",
-      "sha256": "6c8c3987bc7808f220ea84b528649ced8151d88963b05c17544a18b48edb249c"
+      "sha256": "e01dae5a7865a150c1beb51509d93cc2e3d1eda3b78726f66812851b00145779"
     }
   ],
   "inputs_before": [
     {
-      "bytes": 27771,
+      "bytes": 28292,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "56df9333d28f784ec556b6e245e484d4a286bea2273b63803bf6e5f58db37ca3"
+      "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
     },
     {
       "bytes": 7290,
@@ -101,10 +101,10 @@
       "sha256": "c762c9d46bf80dee1dbf1fb0ba5f827d5dfac8cc55f4f3287aa8963f1257cf44"
     },
     {
-      "bytes": 5929,
+      "bytes": 6504,
       "exists": true,
       "path": "tests/fixtures/provenance-card/out/card.svg",
-      "sha256": "5e408cc081529829310ea513e8154c15bab777dee8264d4284eedaea77eb229a"
+      "sha256": "ee4fbcbfc085b08a82807624ab49b9031ee0fdf82d4009cdf93dbcad1f3bd965"
     },
     {
       "bytes": 2601,
@@ -116,7 +116,7 @@
       "bytes": 450,
       "exists": true,
       "path": "tests/fixtures/provenance-card/out/receipt.json",
-      "sha256": "6c8c3987bc7808f220ea84b528649ced8151d88963b05c17544a18b48edb249c"
+      "sha256": "e01dae5a7865a150c1beb51509d93cc2e3d1eda3b78726f66812851b00145779"
     }
   ],
   "outputs_after": [],
@@ -129,8 +129,8 @@
     "path": "tests/fixtures/provenance-card/validation/verify.spec.json",
     "sha256": "f67f47d2f8d358c648cbaf7e6c95904ce2b35bda981f8eb0650e9741c06ae9fb"
   },
-  "started_at_utc": "2026-09-29T13:20:29.078939+00:00",
-  "started_monotonic_ns": 65605192703360,
+  "started_at_utc": "2026-09-29T13:34:50.039765+00:00",
+  "started_monotonic_ns": 66466153533821,
   "status": "completed",
   "stderr": {
     "bytes": 0,

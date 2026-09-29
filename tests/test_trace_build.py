@@ -279,7 +279,91 @@ class BuildTraceTests(unittest.TestCase):
             self.run_trace()
         self.assertFalse(self.receipt.exists())
 
+    def test_receipt_cannot_be_a_declared_input(self) -> None:
+        (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
+        (self.root / "input.txt").write_text("original", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+            with self.assertRaisesRegex(ValueError, "receipt aliases declared input"):
+                trace_build.run(self.root, "trace-spec.json", self.root / "input.txt")
+        self.assertEqual((self.root / "input.txt").read_text(encoding="utf-8"), "original")
+        self.assertFalse((self.root / "output.txt").exists())
+
+    def test_receipt_cannot_be_the_trace_spec(self) -> None:
+        (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        spec_path = self.root / "trace-spec.json"
+        original = spec_path.read_bytes()
+        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+            with self.assertRaisesRegex(ValueError, "receipt aliases declared trace spec"):
+                trace_build.run(self.root, "trace-spec.json", spec_path)
+        self.assertEqual(spec_path.read_bytes(), original)
+
+    def test_receipt_cannot_be_a_declared_output(self) -> None:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\nPath('output.txt').write_text('ran')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+            with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
+                trace_build.run(self.root, "trace-spec.json", self.root / "output.txt")
+        self.assertFalse((self.root / "output.txt").exists())
+
+    def test_receipt_symlink_to_declared_output_is_rejected_before_write(self) -> None:
+        (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        alias = self.root / "receipt-link.json"
+        alias.symlink_to("output.txt")
+        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+            with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
+                trace_build.run(self.root, "trace-spec.json", alias)
+        self.assertTrue(alias.is_symlink())
+        self.assertFalse((self.root / "output.txt").exists())
+
+    def test_declared_output_symlink_to_receipt_is_rejected_before_write(self) -> None:
+        (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        output = self.root / "output.txt"
+        output.symlink_to("trace.json")
+        with mock.patch.object(trace_build, "write_atomic", side_effect=AssertionError("wrote receipt")):
+            with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
+                self.run_trace()
+        self.assertTrue(output.is_symlink())
+        self.assertFalse(self.receipt.exists())
+
+    def test_output_symlink_created_during_build_blocks_final_receipt_write(self) -> None:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\nPath('output.txt').symlink_to('trace.json')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
+            self.run_trace()
+        self.assertTrue((self.root / "output.txt").is_symlink())
+        self.assertEqual(json.loads(self.receipt.read_text(encoding="utf-8"))["status"], "started")
+
+    def test_output_hardlink_created_during_build_blocks_final_receipt_write(self) -> None:
+        (self.root / "builder.py").write_text(
+            "import os\nos.link('trace.json', 'output.txt')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        with self.assertRaisesRegex(ValueError, "receipt aliases declared output"):
+            self.run_trace()
+        self.assertTrue((self.root / "output.txt").samefile(self.receipt))
+        self.assertEqual(json.loads(self.receipt.read_text(encoding="utf-8"))["status"], "started")
+
     def test_refuses_to_overwrite_a_receipt(self) -> None:
+        (self.root / "builder.py").write_text("pass\n", encoding="utf-8")
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
         self.receipt.write_text("existing", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "already exists"):
             self.run_trace()

@@ -25,11 +25,14 @@ Hash exact input bytes with the bundled script. Text, images, audio, and transcr
 
 Read [references/manifest.md](references/manifest.md) when preparing a manifest. The script has no network dependency and does not fetch or validate linked sources. Inspect external links independently before claiming that a source supports the wording. Prefer the source's pinned revision and precise section or line locator.
 
-From the repository root:
+Set `PROVENANCE_CARD_SKILL_DIR` to the absolute directory containing this `SKILL.md`. For a copy installed at the default Codex location, run these commands from any project directory:
 
-    python3 skills/provenance-card/scripts/provenance_card.py hash path/to/input
-    python3 skills/provenance-card/scripts/provenance_card.py build path/to/manifest.json --out path/to/new-card
-    python3 skills/provenance-card/scripts/provenance_card.py verify path/to/new-card
+    PROVENANCE_CARD_SKILL_DIR="$HOME/.codex/skills/provenance-card"
+    python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/provenance_card.py" hash path/to/input
+    python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/provenance_card.py" build path/to/manifest.json --out path/to/new-card
+    python3 "$PROVENANCE_CARD_SKILL_DIR/scripts/provenance_card.py" verify path/to/new-card
+
+If using the source checkout or another installation directory, set the variable to that folder's absolute path instead. Input, manifest, and output paths are relative to the current project directory unless written as absolute paths.
 
 When source files are available, add one --input ID=FILE for each declared input to build and verify. The command reports how many exact input byte hashes were actually checked. Paths passed on the command line are not written to the package. Build creates manifest.json, card.svg, sources.md, and receipt.json. It refuses to overwrite an existing package unless --force is supplied. Review the SVG at phone width and the Markdown citations before sharing. The 360-pixel SVG has a full-height layout; avoid presenting a cropped viewport capture as the complete card. In Markdown, SVG image embedding may disable the SVG's internal links, so link sources.md next to the image.
 

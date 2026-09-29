@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-import unicodedata
 import xml.etree.ElementTree as ET
 
 
@@ -65,6 +65,76 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_ascii_w_fits_title_claim_and_citations_at_phone_width(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = fixture("a" * 64)
+            record["title"] = "W" * 26
+            record["claims"][0]["text"] = "W" * 37
+            record["evidence"][0]["label"] = "W" * 80
+            record["stages"]["checked_main"] = {
+                "state": "verified", "evidence_ids": ["E1"],
+            }
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+            output = root / "card"
+            result = run("build", manifest, "--out", output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ET.parse(output / "card.svg").getroot()
+            self.assertEqual(svg.attrib["width"], "360")
+            texts = [node for node in svg.iter() if node.tag.endswith("text") and node.text]
+            titles = [node for node in texts if set(node.text or "") == {"W"}
+                      and node.attrib["font-size"] == "22"]
+            claims = [node for node in texts if set(node.text or "") == {"W"}
+                      and node.attrib["font-size"] == "14"]
+            self.assertEqual(sum(len(node.text or "") for node in titles), 26)
+            self.assertEqual(sum(len(node.text or "") for node in claims), 37)
+            # DejaVu Sans Bold W advances about 1.103 em; 1.15 leaves a margin.
+            self.assertTrue(all(len(node.text or "") * 22 * 1.15 <= 316 for node in titles))
+            self.assertTrue(all(len(node.text or "") * 14 * 1.15 <= 296 for node in claims))
+            citations = [node for node in texts if (node.text or "").startswith("↗ E1")]
+            self.assertEqual(len(citations), 3)
+            self.assertTrue(all((node.text or "").endswith("…") for node in citations))
+            for node in citations:
+                size = int(node.attrib["font-size"])
+                available = 328 - int(node.attrib["x"]) if size == 11 else 338 - int(node.attrib["x"])
+                # Reserve 50 px for the arrow, ID, spacing, and ellipsis.
+                self.assertLessEqual((node.text or "").count("W") * size * 1.15 + 50,
+                                     available)
+            self.assertEqual(run("verify", output).returncode, 0)
+
+    def test_copied_skill_builds_from_unrelated_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installed = root / "codex-home" / "skills" / "provenance-card"
+            shutil.copytree(ROOT / "skills/provenance-card", installed)
+            project = root / "unrelated-project"
+            project.mkdir()
+            source = project / "source.txt"
+            source.write_bytes(b"synthetic project input\n")
+            source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+            (project / "manifest.json").write_text(
+                json.dumps(fixture(source_hash)), encoding="utf-8"
+            )
+            script = installed / "scripts/provenance_card.py"
+
+            def run_installed(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    [sys.executable, str(script), *args], cwd=project,
+                    capture_output=True, text=True, check=False,
+                )
+
+            self.assertEqual(run_installed("hash", "source.txt").stdout.strip(), source_hash)
+            built = run_installed(
+                "build", "manifest.json", "--out", "card",
+                "--input", "I1=source.txt",
+            )
+            self.assertEqual(built.returncode, 0, built.stderr)
+            self.assertIn("checked input bytes 1/1", built.stdout)
+            verified = run_installed("verify", "card", "--input", "I1=source.txt")
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertIn("checked input bytes 1/1", verified.stdout)
+
     def test_long_local_evidence_id_fits_claim_and_stage_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -83,7 +153,7 @@ class ProvenanceCardTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             svg = ET.parse(output / "card.svg").getroot()
             rows = [node.text for node in svg.iter()
-                    if node.text and node.text.startswith(long_id)]
+                    if node.text and node.text.startswith(long_id[:8])]
             self.assertEqual(len(rows), 3)
             self.assertTrue(all(row.endswith("…") for row in rows))
             self.assertTrue(all(len(row) <= 41 for row in rows))
@@ -124,16 +194,16 @@ class ProvenanceCardTests(unittest.TestCase):
             result = run("build", manifest, "--out", output)
             self.assertEqual(result.returncode, 0, result.stderr)
             svg = ET.parse(output / "card.svg").getroot()
-            citations = [node.text for node in svg.iter()
+            citations = [node for node in svg.iter()
                          if node.text and node.text.startswith("↗ E1")]
             self.assertEqual(len(citations), 3)
-            self.assertTrue(all(text.endswith("…") for text in citations))
-            self.assertTrue(all(
-                sum(0 if unicodedata.combining(char) else
-                    2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
-                    for char in text) <= 41
-                for text in citations
-            ))
+            self.assertTrue(all((node.text or "").endswith("…") for node in citations))
+            for node in citations:
+                size = int(node.attrib["font-size"])
+                available = 328 - int(node.attrib["x"]) if size == 11 else 338 - int(node.attrib["x"])
+                # Full-width W advances about 1 em; reserve the link prefix and ellipsis.
+                self.assertLessEqual((node.text or "").count("Ｗ") * size * 1.1 + 60,
+                                     available)
             self.assertEqual(run("verify", output).returncode, 0)
 
     def test_timestamps_require_utc_time_component(self) -> None:

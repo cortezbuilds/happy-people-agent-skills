@@ -17,6 +17,15 @@ import verify_trace_receipts  # noqa: E402
 
 
 class SavedTraceReceiptTests(unittest.TestCase):
+    def copy_saved_receipts(self, source: Path | None = None) -> Path:
+        """Copy only the records under test, never the tests run's own receipt."""
+        source = source or ROOT / "tests/fixtures/provenance-card/validation/receipts"
+        copied = Path(self.temp.name) / "receipts"
+        copied.mkdir()
+        for name in ("build.json", "verify.json"):
+            shutil.copy2(source / name, copied / name)
+        return copied
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -43,9 +52,7 @@ class SavedTraceReceiptTests(unittest.TestCase):
             verify_trace_receipts.verify(ROOT, self.generated, names=("build", "verify"))
 
     def test_changed_saved_digest_fails(self) -> None:
-        saved = ROOT / "tests/fixtures/provenance-card/validation/receipts"
-        copied = Path(self.temp.name) / "receipts"
-        shutil.copytree(saved, copied)
+        copied = self.copy_saved_receipts()
         path = copied / "build.json"
         record = json.loads(path.read_text())
         record["outputs_after"][0]["sha256"] = "0" * 64
@@ -54,15 +61,55 @@ class SavedTraceReceiptTests(unittest.TestCase):
             verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
 
     def test_incomplete_group_capture_fails(self) -> None:
-        saved = ROOT / "tests/fixtures/provenance-card/validation/receipts"
-        copied = Path(self.temp.name) / "receipts"
-        shutil.copytree(saved, copied)
+        copied = self.copy_saved_receipts()
         path = copied / "build.json"
         record = json.loads(path.read_text())
         record["group_quiescent"] = False
         path.write_text(json.dumps(record))
         with self.assertRaisesRegex(ValueError, "group_quiescent is not true"):
             verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
+    def test_malformed_executable_digest_fails(self) -> None:
+        copied = self.copy_saved_receipts()
+        path = copied / "build.json"
+        record = json.loads(path.read_text())
+        for label in ("executable", "executable_after"):
+            record[label]["sha256"] = "not-a-sha256-digest"
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "executable has invalid digest or byte count"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
+    def test_invalid_utc_timestamp_fails(self) -> None:
+        copied = self.copy_saved_receipts()
+        path = copied / "build.json"
+        record = json.loads(path.read_text())
+        record["started_at_utc"] = "2026-09-29T13:00:00+02:00"
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "invalid started_at_utc"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
+    def test_inconsistent_monotonic_timing_fails(self) -> None:
+        copied = self.copy_saved_receipts()
+        path = copied / "build.json"
+        record = json.loads(path.read_text())
+        record["duration_monotonic_ns"] += 1
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "invalid monotonic timing"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
+    def test_copy_excludes_tests_receipt(self) -> None:
+        source = Path(self.temp.name) / "source-receipts"
+        source.mkdir()
+        saved = ROOT / "tests/fixtures/provenance-card/validation/receipts"
+        for name in ("build.json", "verify.json"):
+            shutil.copy2(saved / name, source / name)
+        (source / "tests.json").write_text("self-referential receipt must not be read")
+
+        copied = self.copy_saved_receipts(source)
+        self.assertEqual(
+            sorted(path.name for path in copied.iterdir()),
+            ["build.json", "verify.json"],
+        )
 
 
 if __name__ == "__main__":

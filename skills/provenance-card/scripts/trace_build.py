@@ -255,6 +255,23 @@ def _wait_group_quiescent(pid: int, seconds: float, *, kill: bool) -> bool:
         time.sleep(min(GROUP_POLL_SECONDS, remaining))
 
 
+def ensure_receipt_disjoint(root: Path, spec_name: str, spec: dict[str, Any],
+                            receipt_path: Path) -> None:
+    """Reject path and inode aliases before either receipt write."""
+    try:
+        receipt_target = receipt_path.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("receipt path cannot be resolved") from exc
+    declared = [("trace spec", spec_name)]
+    declared.extend(("input", name) for name in spec["inputs"])
+    declared.extend(("output", name) for name in spec["outputs"])
+    for kind, name in declared:
+        path = repo_path(root, name, must_exist=False)
+        if (receipt_target == path or
+                (receipt_path.exists() and path.exists() and receipt_path.samefile(path))):
+            raise ValueError(f"receipt aliases declared {kind}: {name}")
+
+
 def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
     executable = resolve_executable(root, command[0])
     empty_stream = sha256_bytes(b"") | {"complete": True, "error": None}
@@ -360,9 +377,10 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
     root = root.resolve(strict=True)
     if not root.is_dir():
         raise ValueError("root must be a directory")
-    if receipt_path.exists():
-        raise ValueError("receipt already exists; use a new path for each run")
     spec, spec_identity = read_spec(root, spec_name)
+    ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
+    if receipt_path.exists() or receipt_path.is_symlink():
+        raise ValueError("receipt already exists; use a new path for each run")
     inputs_before = [file_state(root, name) for name in spec["inputs"]]
     outputs_before = [file_state(root, name) for name in spec["outputs"]]
     start_utc = utc_now()
@@ -383,6 +401,7 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
         "outputs_before": outputs_before,
         "capture_complete": False,
     }
+    ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
     write_atomic(receipt_path, record)
     result = execute(root, spec["command"], spec["timeout_seconds"])
     if not result["group_quiescent"]:
@@ -430,6 +449,7 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
                  ("declared_output_missing" if not outputs_present else None) or
                  ("nonzero_exit" if result["exit_code"] != 0 else None),
     })
+    ensure_receipt_disjoint(root, spec_name, spec, receipt_path)
     write_atomic(receipt_path, record)
     return record
 

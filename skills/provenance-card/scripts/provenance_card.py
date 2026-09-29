@@ -291,21 +291,39 @@ def manifest_id(manifest: dict) -> str:
     return digest(DOMAIN + canonical_bytes(manifest))
 
 
-def display_cells(value: str) -> int:
-    """Approximate rendered width using one cell for narrow, two for wide glyphs."""
-    return sum(
-        0 if unicodedata.combining(char) else
-        2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
-        for char in value
-    )
+def glyph_milli_em(char: str) -> int:
+    """Conservative advance budget for the SVG's sans-serif fonts."""
+    if unicodedata.combining(char) or char in {"\u200c", "\u200d"}:
+        return 0
+    if char == " ":
+        return 450
+    if char in "W":
+        return 1150
+    if char in "Mm@%":
+        return 1100
+    if char == "w":
+        return 1000
+    if char in "ilI!|.,:;'`":
+        return 600
+    if char.isascii():
+        if char.isupper():
+            return 950
+        if char.isdigit():
+            return 800
+        return 850 if char.islower() else 950
+    return 1200
 
 
-def wrap(value: str, width: int) -> list[str]:
-    """Wrap by approximate glyph width, including full-width scripts."""
+def fits_pixels(value: str, size: int, width_px: int) -> bool:
+    return sum(glyph_milli_em(char) for char in value) * size <= width_px * 1000
+
+
+def wrap(value: str, width_px: int, size: int) -> list[str]:
+    """Wrap to a conservative pixel budget, including broad ASCII glyphs."""
     lines: list[str] = []
     current = ""
     for word in " ".join(value.split()).split(" "):
-        if current and display_cells(current + " " + word) <= width:
+        if current and fits_pixels(current + " " + word, size, width_px):
             current += " " + word
             continue
         if current:
@@ -313,7 +331,7 @@ def wrap(value: str, width: int) -> list[str]:
             current = ""
         piece = ""
         for char in word:
-            if piece and display_cells(piece + char) > width:
+            if piece and not fits_pixels(piece + char, size, width_px):
                 lines.append(piece)
                 piece = ""
             piece += char
@@ -323,14 +341,13 @@ def wrap(value: str, width: int) -> list[str]:
     return lines or [""]
 
 
-def shorten_cells(value: str, width: int) -> str:
+def shorten_pixels(value: str, width_px: int, size: int) -> str:
     value = " ".join(value.split())
-    if display_cells(value) <= width:
+    if fits_pixels(value, size, width_px):
         return value
-    budget = width - display_cells("…")
     result = ""
     for char in value:
-        if display_cells(result + char) > budget:
+        if not fits_pixels(result + char + "…", size, width_px):
             break
         result += char
     return result.rstrip() + "…"
@@ -359,11 +376,11 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
     out.append('<path d="M0 12 Q135 57 360 2" stroke="#386C88" stroke-width="1" opacity=".6" fill="none"/>')
     out.append(svg_text(22, 40, "PROVENANCE / 01", size=11, color="#72D9C5", weight=700))
     y = 72
-    for line in wrap(manifest["title"], 26):
+    for line in wrap(manifest["title"], 316, 22):
         out.append(svg_text(22, y, line, size=22, weight=700))
         y += 29
     y += 10
-    for line in wrap(manifest["summary"], 39):
+    for line in wrap(manifest["summary"], 316, 13):
         out.append(svg_text(22, y, line, size=13, color="#C3D1E1"))
         y += 20
     y += 13
@@ -374,8 +391,8 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
     evidence = {item["id"]: item for item in manifest["evidence"]}
     for claim in manifest["claims"]:
         label, color = CLASSES[claim["class"]]
-        text_lines = wrap(claim["text"], 37)
-        limit_lines = wrap(claim["limit"], 43)
+        text_lines = wrap(claim["text"], 296, 14)
+        limit_lines = wrap(claim["limit"], 296, 11)
         refs = claim["evidence_ids"]
         height = 61 + 21 * len(text_lines) + 17 * len(limit_lines) + 20 * len(refs)
         out.append(f'<rect x="16" y="{y}" width="328" height="{height}" rx="15" '
@@ -394,7 +411,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
             source = evidence[ref]
             cursor += 3
             citation = f"↗ {ref}  {source['label']}"
-            citation = shorten_cells(citation, 41)
+            citation = shorten_pixels(citation, 296, 11)
             if source["url"]:
                 out.append(f'<a href="{html.escape(source["url"], quote=True)}" '
                            f'aria-label="{html.escape(source["label"], quote=True)}">')
@@ -402,7 +419,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
                 out.append("</a>")
             else:
                 out.append(svg_text(32, cursor,
-                                    shorten_cells(f"{ref}  local digest in sources.md", 41),
+                                    shorten_pixels(f"{ref}  local digest in sources.md", 296, 11),
                                     size=11, color="#B5C7D8"))
             cursor += 17
         y += height + 12
@@ -419,7 +436,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
         y += 20
         for ref in entry["evidence_ids"]:
             source = evidence[ref]
-            citation = shorten_cells(f"↗ {ref}  {source['label']}", 41)
+            citation = shorten_pixels(f"↗ {ref}  {source['label']}", 315, 10)
             if source["url"]:
                 out.append(f'<a href="{html.escape(source["url"], quote=True)}" '
                            f'aria-label="{html.escape(source["label"], quote=True)}">')
@@ -427,7 +444,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
                 out.append("</a>")
             else:
                 out.append(svg_text(23, y,
-                                    shorten_cells(f"{ref}  local digest in sources.md", 41),
+                                    shorten_pixels(f"{ref}  local digest in sources.md", 315, 10),
                                     size=10, color="#B5C7D8"))
             y += 15
         y += 3

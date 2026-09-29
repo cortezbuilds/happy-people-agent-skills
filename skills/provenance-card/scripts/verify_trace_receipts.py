@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -15,6 +16,7 @@ VALIDATION = Path("tests/fixtures/provenance-card/validation")
 OUT_PREFIX = "tests/fixtures/provenance-card/out/"
 NAMES = ("build", "verify", "tests")
 HEX = re.compile(r"^[0-9a-f]{64}$")
+UTC_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$")
 
 
 def require(condition: bool, message: str) -> None:
@@ -24,6 +26,33 @@ def require(condition: bool, message: str) -> None:
 
 def identity(data: bytes) -> dict:
     return {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+
+
+def check_digest(value: object, label: str, keys: set[str]) -> None:
+    require(isinstance(value, dict) and set(value) == keys,
+            f"{label} has invalid digest fields")
+    require(isinstance(value["sha256"], str) and HEX.fullmatch(value["sha256"]) is not None
+            and type(value["bytes"]) is int and value["bytes"] >= 0,
+            f"{label} has invalid digest or byte count")
+
+
+def check_timing(record: dict, name: str) -> None:
+    for label in ("started_at_utc", "finished_at_utc"):
+        value = record.get(label)
+        require(isinstance(value, str) and UTC_TIMESTAMP.fullmatch(value) is not None,
+                f"{name} has invalid {label}")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError(f"{name} has invalid {label}") from error
+        require(parsed.utcoffset() == timedelta(0), f"{name} has invalid {label}")
+    fields = ("started_monotonic_ns", "finished_monotonic_ns", "duration_monotonic_ns")
+    require(all(type(record.get(field)) is int and record[field] >= 0 for field in fields),
+            f"{name} has invalid monotonic timing")
+    require(record["finished_monotonic_ns"] >= record["started_monotonic_ns"] and
+            record["duration_monotonic_ns"] ==
+            record["finished_monotonic_ns"] - record["started_monotonic_ns"],
+            f"{name} has invalid monotonic timing")
 
 
 def safe_path(root: Path, name: str, generated: Path) -> Path:
@@ -92,12 +121,13 @@ def verify(
                 f"{name} run was not successful")
         require(record.get("executable") == record.get("executable_after"),
                 f"{name} executable changed during capture")
+        check_digest(record.get("executable"), f"{name} executable", {"sha256", "bytes"})
+        check_digest(record.get("executable_after"), f"{name} executable_after", {"sha256", "bytes"})
+        check_timing(record, name)
         for stream in ("stdout", "stderr"):
             state = record.get(stream)
-            require(isinstance(state, dict) and state.get("complete") is True
-                    and state.get("error") is None and isinstance(state.get("bytes"), int)
-                    and state["bytes"] >= 0 and isinstance(state.get("sha256"), str)
-                    and HEX.fullmatch(state["sha256"]) is not None,
+            check_digest(state, f"{name} {stream}", {"sha256", "bytes", "complete", "error"})
+            require(state["complete"] is True and state["error"] is None,
                     f"{name} {stream} capture is incomplete")
 
         inputs = spec.get("inputs")
