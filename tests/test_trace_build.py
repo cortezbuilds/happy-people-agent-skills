@@ -340,6 +340,105 @@ class BuildTraceTests(unittest.TestCase):
                          hashlib.sha256(direct.stdout.encode()).hexdigest())
         self.assertEqual(result["executable"], trace_build.sha256_file(program))
 
+    def test_symlink_parent_component_hashes_executed_file(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        (self.root / "deep" / "inner").mkdir(parents=True)
+        (self.root / "link").symlink_to(self.root / "deep" / "inner", target_is_directory=True)
+        real = self.root / "deep" / "builder"
+        decoy = self.root / "builder"
+        for program, label in ((real, "real"), (decoy, "decoy")):
+            program.write_text(
+                f"#!{sys.executable}\n"
+                "from pathlib import Path\n"
+                "import sys\n"
+                f"value = {label!r} + ':' + sys.argv[0]\n"
+                "Path('output.txt').write_text(value)\n"
+                "print(value)\n",
+                encoding="utf-8",
+            )
+            program.chmod(0o755)
+        self.write_spec(["link/../builder"],
+                        inputs=["deep/builder", "builder", "input.txt"])
+        direct = subprocess.run(["link/../builder"], cwd=self.root,
+                                capture_output=True, text=True)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        expected = (self.root / "output.txt").read_text(encoding="utf-8")
+        self.assertEqual(expected, "real:link/../builder")
+        (self.root / "output.txt").unlink()
+
+        result = self.run_trace()
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), expected)
+        self.assertEqual(result["stdout"]["sha256"],
+                         hashlib.sha256(direct.stdout.encode()).hexdigest())
+        self.assertNotEqual(trace_build.sha256_file(real), trace_build.sha256_file(decoy))
+        self.assertEqual(result["executable"], trace_build.sha256_file(real))
+        self.assertEqual(result["executable_after"], trace_build.sha256_file(real))
+
+    def test_relative_path_symlink_parent_hashes_executed_file(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        (self.root / "deep" / "inner").mkdir(parents=True)
+        (self.root / "link").symlink_to(self.root / "deep" / "inner", target_is_directory=True)
+        real = self.root / "deep" / "builder"
+        decoy = self.root / "builder"
+        for program, label in ((real, "real"), (decoy, "decoy")):
+            program.write_text(
+                f"#!{sys.executable}\n"
+                "from pathlib import Path\n"
+                "import sys\n"
+                f"value = {label!r} + ':' + sys.argv[0]\n"
+                "Path('output.txt').write_text(value)\n"
+                "print(value)\n",
+                encoding="utf-8",
+            )
+            program.chmod(0o755)
+        self.write_spec(["builder"], inputs=["deep/builder", "builder", "input.txt"])
+        with mock.patch.dict(os.environ, {"PATH": "link/.."}):
+            direct = subprocess.run(["builder"], cwd=self.root,
+                                    capture_output=True, text=True)
+            self.assertEqual(direct.returncode, 0, direct.stderr)
+            expected = (self.root / "output.txt").read_text(encoding="utf-8")
+            (self.root / "output.txt").unlink()
+            result = self.run_trace()
+        self.assertEqual(expected, "real:link/../builder")
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), expected)
+        self.assertEqual(result["stdout"]["sha256"],
+                         hashlib.sha256(direct.stdout.encode()).hexdigest())
+        self.assertNotEqual(trace_build.sha256_file(real), trace_build.sha256_file(decoy))
+        self.assertEqual(result["executable"], trace_build.sha256_file(real))
+        self.assertEqual(result["executable_after"], trace_build.sha256_file(real))
+
+    def test_empty_argument_is_preserved_but_empty_program_is_rejected(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\n"
+            "import sys\n"
+            "Path('output.txt').write_text(repr(sys.argv[1]))\n",
+            encoding="utf-8",
+        )
+        self.write_spec(["python3", "builder.py", ""])
+        result = self.run_trace()
+        self.assertTrue(result["success"])
+        self.assertEqual((self.root / "output.txt").read_text(encoding="utf-8"), "''")
+
+        self.receipt.unlink()
+        self.write_spec(["", "builder.py"], outputs=[])
+        with self.assertRaisesRegex(ValueError, "nonempty program"):
+            self.run_trace()
+        self.assertFalse(self.receipt.exists())
+
+    def test_duplicate_trace_spec_key_is_rejected(self) -> None:
+        (self.root / "trace-spec.json").write_text(
+            '{"schema_version":"build-trace-spec/1",'
+            '"command":["python3"],"command":["/bin/false"],'
+            '"inputs":[],"outputs":[],"timeout_seconds":1}',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate JSON key: command"):
+            self.run_trace()
+        self.assertFalse(self.receipt.exists())
+
     def test_relative_path_entry_is_resolved_from_build_root(self) -> None:
         (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
         root_bin = self.root / "bin"

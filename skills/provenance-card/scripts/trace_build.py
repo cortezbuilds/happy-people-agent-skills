@@ -51,6 +51,15 @@ def sha256_bytes(data: bytes) -> dict[str, Any]:
     return {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def resolve_executable(root: Path, program: str) -> tuple[Path, str] | None:
     if "/" in program:
         candidate = Path(program)
@@ -69,19 +78,19 @@ def resolve_executable(root: Path, program: str) -> tuple[Path, str] | None:
         if located is None:
             return None
         candidate = Path(located)
-        selected = Path(os.path.abspath(candidate))
         invocation = None
         for entry in path_entries:
             path = f"{entry}/{program}" if entry else program
             test_path = Path(path) if os.path.isabs(path) else root / path
-            if Path(os.path.abspath(test_path)) == selected:
+            if test_path == candidate:
                 invocation = path
                 break
         if invocation is None:
             return None
-    # Hash the selected pathname, including a symlink's target, while preserving
-    # the exec pathname spelling: shebang interpreters expose it as sys.argv[0].
-    candidate = Path(os.path.abspath(candidate))
+    # Keep path components intact. abspath() would lexically collapse `link/..`
+    # before the kernel traverses `link`, potentially hashing another file.
+    # Opening candidate follows the same filesystem path as execution, and
+    # preserving invocation keeps shebang sys.argv[0] consistent with direct use.
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
         return None
     return candidate, invocation
@@ -115,15 +124,16 @@ def read_spec(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     spec_path = repo_path(root, spec_name, must_exist=True)
     raw = spec_path.read_bytes()
-    spec = json.loads(raw)
+    spec = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
     if not isinstance(spec, dict) or set(spec) != {
         "schema_version", "command", "inputs", "outputs", "timeout_seconds"
     } or spec["schema_version"] != SPEC_SCHEMA:
         raise ValueError("invalid build trace spec schema")
     command = spec["command"]
     if (not isinstance(command, list) or not command or
-            any(not isinstance(arg, str) or not arg or "\x00" in arg for arg in command)):
-        raise ValueError("command must be a nonempty list of argument strings")
+            not isinstance(command[0], str) or not command[0] or
+            any(not isinstance(arg, str) or "\x00" in arg for arg in command)):
+        raise ValueError("command must be a nonempty list with a nonempty program and argument strings")
     for key in ("inputs", "outputs"):
         paths = spec[key]
         if not isinstance(paths, list) or any(not isinstance(p, str) for p in paths):
