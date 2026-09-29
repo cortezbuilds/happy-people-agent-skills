@@ -369,6 +369,25 @@ class BuildTraceTests(unittest.TestCase):
             self.run_trace()
         self.assertEqual(self.receipt.read_text(encoding="utf-8"), "existing")
 
+    def test_existing_receipt_temp_input_is_preserved_on_exclusive_create_failure(self) -> None:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\nPath('output.txt').write_text('ran')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        temporary = self.receipt.with_name(self.receipt.name + f".tmp-{os.getpid()}")
+        protected = b"SYNTHETIC DECLARED INPUT"
+        temporary.write_bytes(protected)
+        self.write_spec(["python3", "builder.py"],
+                        inputs=["builder.py", "input.txt", temporary.name])
+
+        with self.assertRaises(FileExistsError):
+            self.run_trace()
+
+        self.assertEqual(temporary.read_bytes(), protected)
+        self.assertFalse(self.receipt.exists())
+        self.assertFalse((self.root / "output.txt").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

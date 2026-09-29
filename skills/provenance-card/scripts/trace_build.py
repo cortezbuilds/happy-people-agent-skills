@@ -129,19 +129,33 @@ def write_atomic(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode()
     temporary = path.with_name(path.name + f".tmp-{os.getpid()}")
+    owned_identity: tuple[int, int] | None = None
+    replaced = False
     try:
         with temporary.open("xb") as stream:
+            created = os.fstat(stream.fileno())
+            owned_identity = (created.st_dev, created.st_ino)
             stream.write(encoded)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        replaced = True
         directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
     finally:
-        temporary.unlink(missing_ok=True)
+        # Exclusive creation may have failed because this name already belongs
+        # to a declared input. Never clean up a file this call did not create.
+        if owned_identity is not None and not replaced:
+            try:
+                current = temporary.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                if (current.st_dev, current.st_ino) == owned_identity:
+                    temporary.unlink(missing_ok=True)
 
 
 class StreamDigest:

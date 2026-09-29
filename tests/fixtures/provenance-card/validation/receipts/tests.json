@@ -13,7 +13,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 6510594912,
+  "duration_monotonic_ns": 6266924471,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -25,8 +25,8 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T13:34:57.314392+00:00",
-  "finished_monotonic_ns": 66473428138854,
+  "finished_at_utc": "2026-09-29T13:39:40.069843+00:00",
+  "finished_monotonic_ns": 66756183585021,
   "group_observation": "linux_procfs_waitid_wnowait",
   "group_quiescent": true,
   "input_stable": true,
@@ -56,10 +56,10 @@
       "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
     },
     {
-      "bytes": 20536,
+      "bytes": 21176,
       "exists": true,
       "path": "skills/provenance-card/scripts/trace_build.py",
-      "sha256": "172417ce6e4a510d6eb1579f9231d9708ac09f3475834437534777acdf67551c"
+      "sha256": "8bef130f7c39befb17931e823f8e4416d72c00d3b4406946b80583bcffe13499"
     },
     {
       "bytes": 8147,
@@ -80,10 +80,10 @@
       "sha256": "cb2b2ec73623a85ae85e9da279ee27a4c8d8806171addbb8396663cc54c77f42"
     },
     {
-      "bytes": 18257,
+      "bytes": 19150,
       "exists": true,
       "path": "tests/test_trace_build.py",
-      "sha256": "01da7afa3c15a3e904553c278055b73a9cd30530ea52d221eb360097a5fc5d1d"
+      "sha256": "22e7971b68ea98949bf5149bfe46de098647d2a328587c7997eeda790d41b696"
     },
     {
       "bytes": 5112,
@@ -155,13 +155,13 @@
       "bytes": 5004,
       "exists": true,
       "path": "tests/fixtures/provenance-card/validation/receipts/build.json",
-      "sha256": "d08324116b8735c8d2c771c38b320db6239eb863274715315d611f28259e93e9"
+      "sha256": "3f86050054003cada1240ffe53c662082ef68b588804098e13cf2e2ef41c19c1"
     },
     {
       "bytes": 4950,
       "exists": true,
       "path": "tests/fixtures/provenance-card/validation/receipts/verify.json",
-      "sha256": "7ebdd0a76afc54c84fade7a8b6c0c3146ccbcd3597fa88c619b9c9ab0415396a"
+      "sha256": "611b66c083191935d4006d004cfed083a6597092c88c02be7f6cf9b23465d62b"
     }
   ],
   "inputs_before": [
@@ -190,10 +190,10 @@
       "sha256": "7767cbaa063f2c9b9dcec102475d117ec7b645bccd15011e90a54afd600fec33"
     },
     {
-      "bytes": 20536,
+      "bytes": 21176,
       "exists": true,
       "path": "skills/provenance-card/scripts/trace_build.py",
-      "sha256": "172417ce6e4a510d6eb1579f9231d9708ac09f3475834437534777acdf67551c"
+      "sha256": "8bef130f7c39befb17931e823f8e4416d72c00d3b4406946b80583bcffe13499"
     },
     {
       "bytes": 8147,
@@ -214,10 +214,10 @@
       "sha256": "cb2b2ec73623a85ae85e9da279ee27a4c8d8806171addbb8396663cc54c77f42"
     },
     {
-      "bytes": 18257,
+      "bytes": 19150,
       "exists": true,
       "path": "tests/test_trace_build.py",
-      "sha256": "01da7afa3c15a3e904553c278055b73a9cd30530ea52d221eb360097a5fc5d1d"
+      "sha256": "22e7971b68ea98949bf5149bfe46de098647d2a328587c7997eeda790d41b696"
     },
     {
       "bytes": 5112,
@@ -289,13 +289,13 @@
       "bytes": 5004,
       "exists": true,
       "path": "tests/fixtures/provenance-card/validation/receipts/build.json",
-      "sha256": "d08324116b8735c8d2c771c38b320db6239eb863274715315d611f28259e93e9"
+      "sha256": "3f86050054003cada1240ffe53c662082ef68b588804098e13cf2e2ef41c19c1"
     },
     {
       "bytes": 4950,
       "exists": true,
       "path": "tests/fixtures/provenance-card/validation/receipts/verify.json",
-      "sha256": "7ebdd0a76afc54c84fade7a8b6c0c3146ccbcd3597fa88c619b9c9ab0415396a"
+      "sha256": "611b66c083191935d4006d004cfed083a6597092c88c02be7f6cf9b23465d62b"
     }
   ],
   "outputs_after": [],
@@ -308,14 +308,14 @@
     "path": "tests/fixtures/provenance-card/validation/tests.spec.json",
     "sha256": "00035e64b4fd880c7e80ecf3b5969c6ce9f7104b902a7902f2a5250135bd1d69"
   },
-  "started_at_utc": "2026-09-29T13:34:50.803776+00:00",
-  "started_monotonic_ns": 66466917543942,
+  "started_at_utc": "2026-09-29T13:39:33.802894+00:00",
+  "started_monotonic_ns": 66749916660550,
   "status": "completed",
   "stderr": {
-    "bytes": 6579,
+    "bytes": 6769,
     "complete": true,
     "error": null,
-    "sha256": "986908748880ad4d66454b347176c31883c1614d2e74c9e53baba8a2e8e9b691"
+    "sha256": "263ce6b60431c1b8ded6138ce553adcce1f4d63fcec8ec9090329fbbde48f55c"
   },
   "stdout": {
     "bytes": 203,
