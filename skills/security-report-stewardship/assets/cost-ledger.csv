@@ -1,0 +1,1 @@
+timestamp_utc,request_id,model,input_tokens,cached_input_tokens,output_tokens,price_source_date,estimated_cost,verified_billed_cost,credits,notes
