@@ -49,7 +49,7 @@ For agent-assisted credential studies, use [references/ai-credential-evaluation.
 
 ### 5. Reproduce minimally and honestly
 
-Prefer never-valid synthetic fixtures and isolated environments. An exact replay of a formerly real secret requires confirmation that it is retired, authorization for the target and method, separate approval of the specific destination, and an updated active run contract setting `real_secrets_allowed: true`. The operator handles the exact value locally; the documentation worker does not receive it.
+Prefer never-valid synthetic fixtures and isolated environments. An exact replay of a formerly real secret requires confirmation that it is retired, authorization for the target and method, separate approval of the specific destination, and an updated active run contract setting `real_secrets_allowed: true`. If the replay reaches a cloud UI, API, or other external service, the same contract must also set `external_writes_allowed: true`. The operator handles the exact value locally; the documentation worker does not receive it.
 
 Keep the observed chronology, full replay, and reduced reproducer distinct. Do not move a warning next to a paste and call that the original interaction. Do not feed the suspected failure and desired conclusion into the test conversation.
 
@@ -65,7 +65,7 @@ Do not extrapolate from a small or deliberately adversarial sample to all users.
 
 Use [assets/report-template.md](assets/report-template.md). Lead with one finding, affected surface, observed behavior, expected behavior and its basis, minimal steps, frequency, demonstrated impact, limits, and a specific requested next action.
 
-Include a manifest of sanitized evidence. Prefer one canonical private ticket and direct attachments. Exact sensitive evidence, when genuinely needed and authorized, belongs in a recipient-verified encrypted attachment, not the report body, public issue, or external image host.
+Include a manifest of sanitized evidence. Prefer one canonical private ticket and direct attachments. A submission or attachment upload requires the user's exact-destination approval and an active run contract with `external_writes_allowed: true`. If an attachment contains a live or formerly real credential, also require `real_secrets_allowed: true`; verify the recipient's protected channel. Keep exact sensitive evidence out of the report body, public issue, and external image hosts.
 
 Read [references/private-disclosure.md](references/private-disclosure.md). A draft, encrypted artifact, uploaded attachment, submitted ticket, and acknowledged report are different states.
 
@@ -73,7 +73,7 @@ Read [references/private-disclosure.md](references/private-disclosure.md). A dra
 
 Use [assets/cost-ledger.csv](assets/cost-ledger.csv). Record request IDs, models, token categories, retries, prices and dates, estimated charges, verified billed charges, and credits separately. Never count an estimate as an invoice or an expected bounty as reimbursement.
 
-Keep all paid testing disabled until the user approves a numeric ceiling and the test scope is established. Permission to spend is separate from permission to probe a target. Ask the program about research credits or cost support before large runs. Do not withhold urgent findings pending payment.
+Keep all paid testing disabled until the user approves a numeric ceiling, the test scope is established, and the active run contract sets a positive `paid_api_budget`. Permission to spend is separate from permission to probe a target. Ask the program about research credits or cost support before large runs only when external communication is separately authorized and `external_writes_allowed: true`. Do not withhold urgent findings pending payment.
 
 ### 9. Support the person, calibrate the claim
 
@@ -87,7 +87,7 @@ Do not encourage sleep loss, escalating spending, adversarial messaging, or maki
 
 Report: findings supported; claims withdrawn; tests completed versus planned; costs estimated versus billed; files prepared; any actual submission reference; remaining blocker; next smallest useful action.
 
-Retest a fix with approved synthetic fixtures. Publish only generic methods until case disclosure is authorized. No automatic public case study, patch, repository upload, or social announcement.
+Retest a fix with approved synthetic fixtures and the active target/method and external-write gates for any live call. Publish generic methods only when the user authorizes publication and the active run contract sets `publication_allowed: true`. Case details additionally need disclosure authorization from the applicable program and affected parties. No automatic public case study, patch, repository upload, or social announcement.
 
 ## Delegation
 
