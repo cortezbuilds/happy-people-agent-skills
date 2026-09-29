@@ -88,7 +88,7 @@ An initial small pilot is hypothesis-generating, not a product-wide prevalence e
 
 ### Stage E: minimum impact test, only if authorized
 
-Use a researcher-owned isolated canary sink or local stub with no real recipients. Define an explicit expected boundary before testing. Separate proposed tool arguments, blocked calls, executed calls, and independently verified receipt. Stop once sufficient proof exists.
+Use a local stub by default, with no real recipients. A researcher-owned external canary sink is a separate test: require explicit target and method authorization, exact-destination approval, and an updated active run contract with `external_writes_allowed: true` before any tool execution that could reach it. Define an explicit expected boundary before testing. Separate proposed tool arguments, blocked calls, executed calls, and independently verified receipt. Stop once sufficient proof exists.
 
 A stub can show what an agent attempted. It does not prove live exfiltration. No attempt may collect real users' credentials, bypass their permissions, or involve an unapproved third-party system.
 
