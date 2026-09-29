@@ -11,6 +11,23 @@ Small, optional skills shared as source-available software for community use. Th
 
 The skills are portable Markdown packages. They do not depend on Notion, a hosted ledger, or a particular account. A user can optionally configure a private local adapter after installation; such adapters are excluded from this repository.
 
+## Agent support software and repository conventions
+
+**Agent support software** means versioned, inspectable source that helps an agent understand a project, perform a bounded workflow, or connect to a tool. This repository distributes four standalone skills. The conventions below explain what other common agent files would mean if encountered here or in another repository; they do not announce a release plan. Source in a repository, an installed package, an authenticated connection, and a running schedule are separate states.
+
+| Repository component | Meaning and boundary |
+| --- | --- |
+| Root `AGENTS.md` | Codex reads applicable files as working-directory instructions. Keep repository rules concise and public-safe; the file is not a private memory store. |
+| `.agents/skills/<name>/SKILL.md` | A client that supports repository skills can discover skill metadata and load selected instructions. The file does not install the skill for every user or authorize its tools. The current portable packages are in `skills/`. |
+| `.agents/plugins/marketplace.json` | A catalog for compatible plugin clients. It may make a package selectable, but does not itself install or authenticate it, run it, or publish it in a public marketplace. |
+| `.codex/config.toml` or plugin-root `mcp.json` (`.mcp.json` in legacy packages) | MCP declarations can be scoped to a trusted project or plugin. A declaration alone does not establish that authentication succeeded or a server is connected; keep secrets out of the repository. |
+| Prompt or schedule templates | Versioned text is inert until a host creates a live schedule with a trigger, saved settings, and run history. The host's applicable permissions and notification settings govern its runs. |
+| `MEMORY.md` | An ordinary project document if a repository chooses to maintain one. The filename alone does **not** make Codex load it as memory. Required guidance belongs in `AGENTS.md`; never commit private conversations, account data, or local agent memory. |
+
+Keep repository guidance and reusable packages public-safe. Workspace-specific task records, calendar events, documentation, and authentication stay in their respective systems.
+
+The file locations and activation rules above follow OpenAI's [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [repository skills](https://learn.chatgpt.com/docs/build-skills), [plugin packaging](https://developers.openai.com/plugins/build/plugins), [MCP](https://learn.chatgpt.com/docs/extend/mcp), [memory](https://learn.chatgpt.com/docs/customization/memories), and [scheduled tasks](https://learn.chatgpt.com/docs/automations) documentation.
+
 ## Design rules
 
 1. Evidence before interpretation.
@@ -38,7 +55,7 @@ Only a `verified_public_main` result supports saying that diagram is on **public
 
 Copy the desired folder beneath `skills/` into the Codex skills directory, then run the bundled skill validator against the copied folder. Existing files should be reviewed before replacement.
 
-The development machine already has the published skills installed and validated; this repository is the publication-ready source package.
+Installation and validation are per machine. The repository contains the distributable source and does not show whether a reader's agent has installed or activated a skill.
 
 ## License and safety
 
@@ -54,4 +71,4 @@ Read [SAFETY.md](SAFETY.md) before installation. LLM skills can invoke tools and
 
 ## Publication status
 
-This is a public beta. The included skills have been privacy-checked and validated before release. Feedback and focused contributions are welcome through this repository's issues and pull requests.
+This is a public beta. The included skills have been privacy-checked and validated before release; each installation needs its own check. Feedback and focused contributions are welcome through this repository's issues and pull requests.
