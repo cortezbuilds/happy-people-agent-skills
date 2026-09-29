@@ -51,6 +51,8 @@ The bundled trace_build.py runs one declared subprocess and writes a metadata-on
 
     python3 skills/provenance-card/scripts/trace_build.py --root . --spec path/to/spec.json --receipt path/to/new-trace.json
 
+This optional tracer requires Linux procfs and `waitid` with `WNOWAIT` so it can keep the leader's process-group ID pinned, observe live same-group descendants, and clean them up before final file snapshots. It fails closed when it cannot observe group quiescence. A descendant that creates a new process group or session is outside this boundary; use a stronger host or container boundary if that case matters.
+
 The trace records the spec and executable digests, command, UTC and monotonic timestamps, exit and timeout status, pre/post SHA-256 and byte counts for declared files, and SHA-256 and byte counts for stdout and stderr. It does not save file contents or output bodies. Inspect the spec and receipt before publication: command arguments, paths, byte counts, and digests can themselves disclose sensitive information. Never hash a secret or low-entropy private value for a public receipt.
 
 capture_complete=true means the declared subprocess streams and post-run snapshots completed. success=true additionally requires a zero exit code, stable declared inputs, and all declared outputs present. These flags do not establish that undeclared reads or writes did not occur, that linked sources are true, that the agent loaded this skill, or that any host tool event was observed. A host-observed, version-bound invocation receipt and an independent gate are needed for skill-use claims.

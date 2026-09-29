@@ -8,10 +8,11 @@ from datetime import datetime
 import hashlib
 import html
 import json
+import os
 from pathlib import Path
 import re
 import sys
-import textwrap
+import tempfile
 import unicodedata
 from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
@@ -290,19 +291,21 @@ def manifest_id(manifest: dict) -> str:
     return digest(DOMAIN + canonical_bytes(manifest))
 
 
+def display_cells(value: str) -> int:
+    """Approximate rendered width using one cell for narrow, two for wide glyphs."""
+    return sum(
+        0 if unicodedata.combining(char) else
+        2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
+        for char in value
+    )
+
+
 def wrap(value: str, width: int) -> list[str]:
     """Wrap by approximate glyph width, including full-width scripts."""
-    def cells(text: str) -> int:
-        return sum(
-            0 if unicodedata.combining(char) else
-            2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
-            for char in text
-        )
-
     lines: list[str] = []
     current = ""
     for word in " ".join(value.split()).split(" "):
-        if current and cells(current + " " + word) <= width:
+        if current and display_cells(current + " " + word) <= width:
             current += " " + word
             continue
         if current:
@@ -310,7 +313,7 @@ def wrap(value: str, width: int) -> list[str]:
             current = ""
         piece = ""
         for char in word:
-            if piece and cells(piece + char) > width:
+            if piece and display_cells(piece + char) > width:
                 lines.append(piece)
                 piece = ""
             piece += char
@@ -318,6 +321,19 @@ def wrap(value: str, width: int) -> list[str]:
     if current:
         lines.append(current)
     return lines or [""]
+
+
+def shorten_cells(value: str, width: int) -> str:
+    value = " ".join(value.split())
+    if display_cells(value) <= width:
+        return value
+    budget = width - display_cells("…")
+    result = ""
+    for char in value:
+        if display_cells(result + char) > budget:
+            break
+        result += char
+    return result.rstrip() + "…"
 
 
 def svg_text(x: int, y: int, value: str, *, size: int = 14, color: str = "#E7EFF9",
@@ -378,7 +394,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
             source = evidence[ref]
             cursor += 3
             citation = f"↗ {ref}  {source['label']}"
-            citation = textwrap.shorten(citation, width=41, placeholder="…")
+            citation = shorten_cells(citation, 41)
             if source["url"]:
                 out.append(f'<a href="{html.escape(source["url"], quote=True)}" '
                            f'aria-label="{html.escape(source["label"], quote=True)}">')
@@ -402,7 +418,7 @@ def render_svg(manifest: dict, record_id: str) -> bytes:
         y += 20
         for ref in entry["evidence_ids"]:
             source = evidence[ref]
-            citation = textwrap.shorten(f"↗ {ref}  {source['label']}", width=41, placeholder="…")
+            citation = shorten_cells(f"↗ {ref}  {source['label']}", 41)
             if source["url"]:
                 out.append(f'<a href="{html.escape(source["url"], quote=True)}" '
                            f'aria-label="{html.escape(source["label"], quote=True)}">')
@@ -548,15 +564,33 @@ def check_input_bindings(manifest: dict, bindings: list[str]) -> tuple[int, int]
     return len(seen), len(inputs)
 
 
+def replace_bytes(path: Path, data: bytes) -> None:
+    """Replace an output entry without following symlinks or existing hardlinks."""
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def build(manifest_path: Path, output: Path, force: bool, bindings: list[str]) -> None:
     manifest = load_json(manifest_path)
     files = file_map(manifest)
     checked, total = check_input_bindings(manifest, bindings)
+    if output.is_symlink():
+        fail("output directory must not be a symlink")
     output.mkdir(parents=True, exist_ok=True)
-    if not force and any((output / name).exists() for name in files):
+    if not force and any(
+        (output / name).exists() or (output / name).is_symlink() for name in files
+    ):
         fail("output files exist; choose a new directory or pass --force")
     for name, data in files.items():
-        (output / name).write_bytes(data)
+        replace_bytes(output / name, data)
     print(f"built {output} · record {manifest_id(manifest)} · checked input bytes {checked}/{total}")
 
 

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unicodedata
 import xml.etree.ElementTree as ET
 
 
@@ -64,6 +65,53 @@ def fixture(source_hash: str) -> dict:
 
 
 class ProvenanceCardTests(unittest.TestCase):
+    def test_force_replaces_symlink_entry_without_touching_its_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(fixture("a" * 64)), encoding="utf-8")
+            output = root / "card"
+            output.mkdir()
+            outside = root / "outside.txt"
+            outside.write_bytes(b"keep this target unchanged")
+            (output / "card.svg").symlink_to(outside)
+            result = run("build", manifest, "--out", output, "--force")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(outside.read_bytes(), b"keep this target unchanged")
+            self.assertFalse((output / "card.svg").is_symlink())
+            self.assertEqual(run("verify", output).returncode, 0)
+
+            blocked = root / "blocked"
+            blocked.mkdir()
+            (blocked / "card.svg").symlink_to(root / "missing-target")
+            result = run("build", manifest, "--out", blocked)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "missing-target").exists())
+
+    def test_full_width_citation_labels_fit_claim_and_stage_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            record = fixture("a" * 64)
+            record["evidence"][0]["label"] = "Ｗ" * 30
+            record["stages"]["checked_main"] = {"state": "verified", "evidence_ids": ["E1"]}
+            manifest = root / "input.json"
+            manifest.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            output = root / "card"
+            result = run("build", manifest, "--out", output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            svg = ET.parse(output / "card.svg").getroot()
+            citations = [node.text for node in svg.iter()
+                         if node.text and node.text.startswith("↗ E1")]
+            self.assertEqual(len(citations), 3)
+            self.assertTrue(all(text.endswith("…") for text in citations))
+            self.assertTrue(all(
+                sum(0 if unicodedata.combining(char) else
+                    2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
+                    for char in text) <= 41
+                for text in citations
+            ))
+            self.assertEqual(run("verify", output).returncode, 0)
+
     def test_timestamps_require_utc_time_component(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

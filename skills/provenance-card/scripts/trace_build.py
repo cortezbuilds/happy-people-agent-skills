@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Record metadata for one controlled subprocess build.
+"""Record metadata for one controlled subprocess build on Linux.
 
 The receipt contains file digests and byte counts, never file contents or
-stdout/stderr bodies. This observes a declared subprocess boundary only.
+stdout/stderr bodies. Linux procfs and waitid keep the command's process group
+observable until cleanup; descendants that create a new session or process
+group are outside this declared subprocess boundary.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ SCHEMA = "build-trace/1"
 SPEC_SCHEMA = "build-trace-spec/1"
 CHUNK = 1024 * 1024
 TERMINATION_GRACE_SECONDS = 2.0
+GROUP_POLL_SECONDS = 0.02
+GROUP_KILL_WAIT_SECONDS = 2.0
 
 
 def utc_now() -> str:
@@ -165,21 +169,109 @@ class StreamDigest:
         }
 
 
+def _proc_state_and_group(pid: int) -> tuple[str, int]:
+    """Read Linux procfs without parsing a process name as whitespace fields."""
+    raw = Path(f"/proc/{pid}/stat").read_bytes()
+    closing = raw.rfind(b")")
+    if closing < 0:
+        raise ValueError("invalid procfs stat")
+    fields = raw[closing + 1:].split()
+    if len(fields) < 3:
+        raise ValueError("invalid procfs stat")
+    return fields[0].decode("ascii"), int(fields[2])
+
+
+def _group_observation_available() -> bool:
+    required = ("waitid", "P_PID", "WEXITED", "WNOWAIT", "WNOHANG", "killpg")
+    if not sys.platform.startswith("linux") or any(not hasattr(os, name) for name in required):
+        return False
+    try:
+        return _proc_state_and_group(os.getpid())[1] == os.getpgrp()
+    except (OSError, ValueError, UnicodeError):
+        return False
+
+
+def _leader_exited_unreaped(pid: int) -> bool:
+    # WNOWAIT leaves the child as a zombie. Its PID and process-group ID cannot
+    # be recycled while we inspect and signal the rest of the process group.
+    return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is not None
+
+
+def _live_group_members(group: int, leader: int) -> list[int]:
+    members: list[int] = []
+    leader_seen = False
+    with os.scandir("/proc") as entries:
+        for entry in entries:
+            if not entry.name.isdecimal():
+                continue
+            pid = int(entry.name)
+            try:
+                state, process_group = _proc_state_and_group(pid)
+            except FileNotFoundError:
+                # The process exited between directory listing and stat read.
+                continue
+            if pid == leader:
+                leader_seen = True
+            if process_group == group and state not in ("Z", "X", "x"):
+                members.append(pid)
+    if not leader_seen:
+        raise RuntimeError("process group leader is no longer pinned")
+    return members
+
+
+def _signal_pinned_group(pid: int, signum: signal.Signals) -> None:
+    # Do not use a stored PGID if some other thread reaped the leader.
+    _leader_exited_unreaped(pid)
+    try:
+        os.killpg(pid, signum)
+    except ProcessLookupError:
+        pass
+
+
+def _wait_group_quiescent(pid: int, seconds: float, *, kill: bool) -> bool:
+    deadline = time.monotonic() + seconds
+    empty_observations = 0
+    while True:
+        members = _live_group_members(pid, pid)
+        if not members:
+            empty_observations += 1
+            # A second scan after a scheduler interval catches a child forked
+            # while the first SIGKILL was being delivered.
+            if empty_observations == 2:
+                return True
+        else:
+            empty_observations = 0
+            if kill:
+                _signal_pinned_group(pid, signal.SIGKILL)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(GROUP_POLL_SECONDS, remaining))
+
+
 def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
     executable = resolve_executable(root, command[0])
     empty_stream = sha256_bytes(b"") | {"complete": True, "error": None}
+    group_fields = {"group_observation": "linux_procfs_waitid_wnowait",
+                    "group_quiescent": False, "background_descendants_seen": False}
     if executable is None:
         return {"exit_code": None, "timed_out": False,
                 "stdout": empty_stream, "stderr": empty_stream,
                 "executable": None, "executable_stable": False,
-                "error": "executable_not_found"}
+                "error": "executable_not_found", **group_fields}
+    if not _group_observation_available():
+        return {"exit_code": None, "timed_out": False,
+                "stdout": empty_stream, "stderr": empty_stream,
+                "executable": None, "executable_stable": False,
+                "error": "process_group_unobservable",
+                **(group_fields | {"group_observation": "unavailable"})}
     try:
         executable_before = sha256_file(executable)
     except OSError as exc:
         return {"exit_code": None, "timed_out": False,
                 "stdout": empty_stream, "stderr": empty_stream,
                 "executable": None, "executable_stable": False,
-                "error": f"executable_hash_{type(exc).__name__}"}
+                "error": f"executable_hash_{type(exc).__name__}", **group_fields}
     try:
         process = subprocess.Popen(
             [str(executable), *command[1:]], cwd=root, stdin=subprocess.DEVNULL,
@@ -190,28 +282,49 @@ def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
         return {"exit_code": None, "timed_out": False,
                 "stdout": empty_stream, "stderr": empty_stream,
                 "executable": executable_before, "executable_stable": False,
-                "error": f"spawn_{type(exc).__name__}"}
+                "error": f"spawn_{type(exc).__name__}", **group_fields}
     assert process.stdout is not None and process.stderr is not None
     stdout, stderr = StreamDigest(process.stdout), StreamDigest(process.stderr)
     stdout.start()
     stderr.start()
     timed_out = False
+    background_descendants_seen = False
+    observation_error: str | None = None
+    group_quiescent = False
+    deadline = time.monotonic() + timeout
     try:
-        process.wait(timeout=timeout)
+        while True:
+            if _leader_exited_unreaped(process.pid):
+                members = _live_group_members(process.pid, process.pid)
+                if members:
+                    background_descendants_seen = True
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                break
+            time.sleep(min(GROUP_POLL_SECONDS, remaining))
+    except (OSError, ValueError, RuntimeError, ChildProcessError) as exc:
+        observation_error = f"process_group_observation_{type(exc).__name__}"
+    if timed_out or background_descendants_seen or observation_error:
+        try:
+            _signal_pinned_group(process.pid, signal.SIGTERM)
+            _wait_group_quiescent(process.pid, TERMINATION_GRACE_SECONDS, kill=False)
+        except (OSError, ValueError, RuntimeError, ChildProcessError) as exc:
+            observation_error = observation_error or f"process_group_observation_{type(exc).__name__}"
+    # Always sweep the group before reaping the leader. Even a peer forked
+    # between the first procfs scan and this signal cannot outlive the trace.
+    try:
+        _signal_pinned_group(process.pid, signal.SIGKILL)
+        group_quiescent = _wait_group_quiescent(process.pid, GROUP_KILL_WAIT_SECONDS, kill=True)
+    except (OSError, ValueError, RuntimeError, ChildProcessError) as exc:
+        observation_error = observation_error or f"process_group_observation_{type(exc).__name__}"
+    try:
+        process.wait(timeout=GROUP_KILL_WAIT_SECONDS)
     except subprocess.TimeoutExpired:
-        timed_out = True
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        # Do not reap the leader before signaling the group again: its PID
-        # keeps the group ID from being recycled while descendants get grace.
-        time.sleep(TERMINATION_GRACE_SECONDS)
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        process.wait()
+        observation_error = observation_error or "process_group_leader_not_reaped"
+    if group_quiescent and process.returncode is None:
+        group_quiescent = False
     try:
         executable_after = sha256_file(executable)
         executable_stable = executable_after == executable_before
@@ -228,7 +341,12 @@ def execute(root: Path, command: list[str], timeout: float) -> dict[str, Any]:
         "executable": executable_before,
         "executable_after": executable_after,
         "executable_stable": executable_stable,
-        "error": "timeout" if timed_out else executable_error,
+        "group_observation": group_fields["group_observation"],
+        "group_quiescent": group_quiescent,
+        "background_descendants_seen": background_descendants_seen,
+        "error": ("timeout" if timed_out else observation_error or
+                  ("background_descendant_after_leader_exit" if background_descendants_seen else None) or
+                  ("process_group_not_quiescent" if not group_quiescent else None) or executable_error),
     }
 
 
@@ -246,7 +364,7 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
     record: dict[str, Any] = {
         "schema_version": SCHEMA,
         "capture_boundary": "controlled_subprocess_stdio_and_declared_files",
-        "scope": "Metadata only. Pre/post declared-file hashes and captured stdio digests; not model, host, or all-process I/O capture.",
+        "scope": "Linux same-process-group metadata only: declared-file hashes and captured stdio digests. New-session/group descendants, model context, host activity, and all-process I/O are outside this capture.",
         "status": "started",
         "root": ".",
         "spec": spec_identity,
@@ -261,20 +379,25 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
     }
     write_atomic(receipt_path, record)
     result = execute(root, spec["command"], spec["timeout_seconds"])
-    try:
-        inputs_after = [file_state(root, name) for name in spec["inputs"]]
-        outputs_after = [file_state(root, name) for name in spec["outputs"]]
-        file_error = None
-    except (OSError, ValueError) as exc:
+    if not result["group_quiescent"]:
         inputs_after, outputs_after = [], []
-        file_error = f"post_snapshot_{type(exc).__name__}"
+        file_error = "post_snapshot_skipped_process_group_not_quiescent"
+    else:
+        try:
+            inputs_after = [file_state(root, name) for name in spec["inputs"]]
+            outputs_after = [file_state(root, name) for name in spec["outputs"]]
+            file_error = None
+        except (OSError, ValueError) as exc:
+            inputs_after, outputs_after = [], []
+            file_error = f"post_snapshot_{type(exc).__name__}"
     finish_mono = time.monotonic_ns()
     input_stable = inputs_after == inputs_before
     outputs_present = all(item["exists"] for item in outputs_after) and len(outputs_after) == len(spec["outputs"])
     stream_complete = result["stdout"]["complete"] and result["stderr"]["complete"]
     capture_complete = (result["exit_code"] is not None and not result["timed_out"]
                         and stream_complete and file_error is None
-                        and result["executable_stable"])
+                        and result["executable_stable"] and result["group_quiescent"]
+                        and not result["background_descendants_seen"] and result["error"] is None)
     success = capture_complete and result["exit_code"] == 0 and input_stable and outputs_present
     record.update({
         "status": "completed" if success else "failed",
@@ -294,6 +417,9 @@ def run(root: Path, spec_name: str, receipt_path: Path) -> dict[str, Any]:
         "executable": result["executable"],
         "executable_after": result.get("executable_after"),
         "executable_stable": result["executable_stable"],
+        "group_observation": result["group_observation"],
+        "group_quiescent": result["group_quiescent"],
+        "background_descendants_seen": result["background_descendants_seen"],
         "error": result["error"] or file_error or ("input_changed" if not input_stable else None) or
                  ("declared_output_missing" if not outputs_present else None) or
                  ("nonzero_exit" if result["exit_code"] != 0 else None),

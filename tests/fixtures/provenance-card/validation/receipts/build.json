@@ -1,4 +1,5 @@
 {
+  "background_descendants_seen": false,
   "capture_boundary": "controlled_subprocess_stdio_and_declared_files",
   "capture_complete": true,
   "command": [
@@ -15,7 +16,7 @@
   ],
   "cwd": ".",
   "declared_outputs_present": true,
-  "duration_monotonic_ns": 119995326,
+  "duration_monotonic_ns": 152926084,
   "error": null,
   "executable": {
     "bytes": 30913848,
@@ -27,15 +28,17 @@
   },
   "executable_stable": true,
   "exit_code": 0,
-  "finished_at_utc": "2026-09-29T12:58:24.873325+00:00",
-  "finished_monotonic_ns": 64280987073932,
+  "finished_at_utc": "2026-09-29T13:10:36.487880+00:00",
+  "finished_monotonic_ns": 65012601629541,
+  "group_observation": "linux_procfs_waitid_wnowait",
+  "group_quiescent": true,
   "input_stable": true,
   "inputs_after": [
     {
-      "bytes": 26620,
+      "bytes": 27661,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "db4fceb60df43590c10e13b7d3e91bece6192a6873f946182047b4289667a97e"
+      "sha256": "3038e73ab9577a18b3d90d03e48b0c201104efd54ca917e51bfae074da7b0b03"
     },
     {
       "bytes": 2276,
@@ -58,10 +61,10 @@
   ],
   "inputs_before": [
     {
-      "bytes": 26620,
+      "bytes": 27661,
       "exists": true,
       "path": "skills/provenance-card/scripts/provenance_card.py",
-      "sha256": "db4fceb60df43590c10e13b7d3e91bece6192a6873f946182047b4289667a97e"
+      "sha256": "3038e73ab9577a18b3d90d03e48b0c201104efd54ca917e51bfae074da7b0b03"
     },
     {
       "bytes": 2276,
@@ -128,14 +131,14 @@
   ],
   "root": ".",
   "schema_version": "build-trace/1",
-  "scope": "Metadata only. Pre/post declared-file hashes and captured stdio digests; not model, host, or all-process I/O capture.",
+  "scope": "Linux same-process-group metadata only: declared-file hashes and captured stdio digests. New-session/group descendants, model context, host activity, and all-process I/O are outside this capture.",
   "spec": {
     "bytes": 874,
     "path": "tests/fixtures/provenance-card/validation/build.spec.json",
     "sha256": "07256b164727cfaea6184d2a5ab57256a42c1975187675ec7fb50f37e167900b"
   },
-  "started_at_utc": "2026-09-29T12:58:24.753312+00:00",
-  "started_monotonic_ns": 64280867078606,
+  "started_at_utc": "2026-09-29T13:10:36.334940+00:00",
+  "started_monotonic_ns": 65012448703457,
   "status": "completed",
   "stderr": {
     "bytes": 0,

@@ -53,6 +53,17 @@ class SavedTraceReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from current declared files"):
             verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
 
+    def test_incomplete_group_capture_fails(self) -> None:
+        saved = ROOT / "tests/fixtures/provenance-card/validation/receipts"
+        copied = Path(self.temp.name) / "receipts"
+        shutil.copytree(saved, copied)
+        path = copied / "build.json"
+        record = json.loads(path.read_text())
+        record["group_quiescent"] = False
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ValueError, "group_quiescent is not true"):
+            verify_trace_receipts.verify(ROOT, self.generated, copied, ("build", "verify"))
+
 
 if __name__ == "__main__":
     unittest.main()

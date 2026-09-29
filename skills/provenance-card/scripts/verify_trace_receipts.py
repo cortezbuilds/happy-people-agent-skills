@@ -82,8 +82,11 @@ def verify(
         require(record.get("capture_boundary") == "controlled_subprocess_stdio_and_declared_files",
                 f"{name} capture boundary")
         for key in ("capture_complete", "success", "input_stable",
-                    "declared_outputs_present", "executable_stable"):
+                    "declared_outputs_present", "executable_stable", "group_quiescent"):
             require(record.get(key) is True, f"{name} {key} is not true")
+        require(record.get("group_observation") == "linux_procfs_waitid_wnowait"
+                and record.get("background_descendants_seen") is False,
+                f"{name} process group capture is incomplete")
         require(record.get("status") == "completed" and record.get("exit_code") == 0
                 and record.get("timed_out") is False and record.get("error") is None,
                 f"{name} run was not successful")

@@ -155,17 +155,74 @@ class BuildTraceTests(unittest.TestCase):
             "import signal, time\n"
             "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
             "Path('child-started').write_text('yes')\n"
-            "time.sleep(0.8)\n"
-            "Path('late-write').write_text('child survived')\n",
+            "for _ in range(500):\n"
+            "    if Path('release-child').exists():\n"
+            "        Path('late-write').write_text('child survived')\n"
+            "        break\n"
+            "    time.sleep(0.01)\n",
             encoding="utf-8",
         )
-        self.write_spec(["python3", "builder.py"], timeout=0.15)
-        with mock.patch.object(trace_build, "TERMINATION_GRACE_SECONDS", 0.15):
+        self.write_spec(["python3", "builder.py"], timeout=1.5)
+        with mock.patch.object(trace_build, "TERMINATION_GRACE_SECONDS", 0.05):
             result = self.run_trace()
         self.assertTrue(result["timed_out"])
         self.assertTrue((self.root / "child-started").is_file())
-        time.sleep(0.7)
+        self.assertTrue(result["group_quiescent"])
+        (self.root / "release-child").write_text("go", encoding="utf-8")
+        time.sleep(0.5)
         self.assertFalse((self.root / "late-write").exists())
+
+    def test_successful_leader_with_background_child_is_incomplete_and_cleaned_up(self) -> None:
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\n"
+            "import subprocess, sys, time\n"
+            "subprocess.Popen([sys.executable, 'child.py'],\n"
+            "                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+            "while not Path('child-started').exists(): time.sleep(0.005)\n"
+            "Path('output.txt').write_text('leader finished')\n",
+            encoding="utf-8",
+        )
+        (self.root / "child.py").write_text(
+            "from pathlib import Path\n"
+            "import signal, time\n"
+            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+            "Path('child-started').write_text('yes')\n"
+            "for _ in range(500):\n"
+            "    if Path('release-child').exists():\n"
+            "        Path('late-write').write_text('child survived snapshot')\n"
+            "        break\n"
+            "    time.sleep(0.01)\n",
+            encoding="utf-8",
+        )
+        self.write_spec(["python3", "builder.py"], timeout=2)
+        with mock.patch.object(trace_build, "TERMINATION_GRACE_SECONDS", 0.05):
+            result = self.run_trace()
+
+        self.assertEqual(result["exit_code"], 0)
+        self.assertTrue(result["background_descendants_seen"])
+        self.assertTrue(result["group_quiescent"])
+        self.assertFalse(result["capture_complete"])
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"], "background_descendant_after_leader_exit")
+        (self.root / "release-child").write_text("go", encoding="utf-8")
+        time.sleep(0.5)
+        self.assertFalse((self.root / "late-write").exists())
+
+    def test_unobservable_process_group_fails_before_spawn(self) -> None:
+        (self.root / "builder.py").write_text(
+            "from pathlib import Path\nPath('output.txt').write_text('ran')\n",
+            encoding="utf-8",
+        )
+        (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
+        self.write_spec(["python3", "builder.py"])
+        with mock.patch.object(trace_build, "_group_observation_available", return_value=False):
+            result = self.run_trace()
+        self.assertEqual(result["group_observation"], "unavailable")
+        self.assertFalse(result["group_quiescent"])
+        self.assertFalse(result["capture_complete"])
+        self.assertEqual(result["error"], "process_group_unobservable")
+        self.assertFalse((self.root / "output.txt").exists())
 
     def test_symlink_invocation_preserves_selected_basename(self) -> None:
         (self.root / "input.txt").write_text("synthetic", encoding="utf-8")
