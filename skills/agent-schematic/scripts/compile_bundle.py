@@ -323,6 +323,8 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
             require(isinstance(condition, dict) and valid_id(condition.get("fact")) and
                     "equals" in condition and scalar(condition["equals"]),
                     f"{step_id}: guard must use scalar fact equality")
+        require(len({condition["fact"] for condition in guard}) == len(guard),
+                f"{step_id}: guard must reference each fact at most once")
         refs = step.get("evidence_refs", [])
         require(isinstance(refs, list) and len(refs) <= MAX_EVIDENCE_FILES and
                 all(valid_id(ref) and ref in evidence for ref in refs),
@@ -417,13 +419,38 @@ def gate_for_step(step: dict, approvals: list[dict], evidence: dict):
             "execution": "not_run"}
 
 
-def guard_result(guard: list[dict], facts: dict):
+def contradicts_exclusion(facts: dict, equalities: dict,
+                          exclusions: list[dict]) -> bool:
+    """Detect a path that now requires every term of an excluded conjunction."""
+    for clause in exclusions:
+        if all((exact_equal(facts[fact]["value"], value) if fact in facts else
+                fact in equalities and exact_equal(equalities[fact], value))
+               for fact, value in clause.items()):
+            return True
+    return False
+
+
+def guard_result(guard: list[dict], facts: dict, equalities: dict | None = None,
+                 exclusions: list[dict] | None = None):
+    equalities = equalities if equalities is not None else {}
+    exclusions = exclusions if exclusions is not None else []
     unknown = []
     for condition in guard:
         fact = condition["fact"]
-        if fact not in facts:
+        if fact in facts:
+            value = facts[fact]["value"]
+        elif fact in equalities:
+            value = equalities[fact]
+        else:
             unknown.append(fact)
-        elif not exact_equal(facts[fact]["value"], condition["equals"]):
+            continue
+        if not exact_equal(value, condition["equals"]):
+            return False, []
+    if unknown:
+        required = dict(equalities)
+        required.update({condition["fact"]: condition["equals"]
+                         for condition in guard if condition["fact"] in unknown})
+        if contradicts_exclusion(facts, required, exclusions):
             return False, []
     return (None, sorted(set(unknown))) if unknown else (True, [])
 
@@ -446,9 +473,31 @@ def has_current_unknown_branch(path: dict) -> bool:
             path["step_results"][-1]["forecast_status"] in UNKNOWN_STATUSES)
 
 
+def project_guard_constraints_for_assignment(path: dict, fact: str) -> None:
+    """Keep consequences about other facts when an outcome overwrites this fact."""
+    if fact in path["facts"]:
+        old_value = path["facts"][fact]["value"]
+        old_known = True
+    else:
+        old_known = fact in path["_guard_equalities"]
+        old_value = path["_guard_equalities"].get(fact)
+    residual_clauses = []
+    for clause in path["_guard_exclusions"]:
+        if fact not in clause:
+            residual_clauses.append(clause)
+        elif old_known and exact_equal(old_value, clause[fact]):
+            residual = {key: value for key, value in clause.items() if key != fact}
+            require(residual, "inconsistent guard assumptions before assignment")
+            residual_clauses.append(residual)
+        # An unconstrained or different old value can satisfy this clause,
+        # leaving no necessary constraint on the unchanged facts.
+    path["_guard_exclusions"] = residual_clauses
+    path["_guard_equalities"].pop(fact, None)
+
+
 def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
     paths = [{"facts": copy.deepcopy(observed_facts), "step_results": [],
-              "conditions": []}]
+              "conditions": [], "_guard_equalities": {}, "_guard_exclusions": []}]
     truncated = False
     omitted_lower_bound = 0
     first_truncated_step = None
@@ -460,7 +509,9 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
         step_id = step["id"]
 
         def offer(path: dict, status: str, outcome: dict | None = None,
-                  condition: dict | None = None) -> None:
+                  condition: dict | None = None,
+                  equality_assumptions: dict | None = None,
+                  excluded_conjunction: dict | None = None) -> None:
             nonlocal produced_count, current_unknown_candidate, historical_unknown_candidate
             produced_count += 1
             in_prefix = len(produced) < max_paths
@@ -474,8 +525,13 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
             branch = append_result(path, step_id, status, outcome_id)
             if condition is not None:
                 branch["conditions"].append(condition)
+            if equality_assumptions is not None:
+                branch["_guard_equalities"].update(equality_assumptions)
+            if excluded_conjunction is not None:
+                branch["_guard_exclusions"].append(excluded_conjunction)
             if outcome is not None:
                 for key, value in outcome.get("set", {}).items():
+                    project_guard_constraints_for_assignment(branch, key)
                     branch["facts"][key] = {"value": value, "origin": "inferred",
                                             "via_step": step_id,
                                             "via_outcome": outcome_id}
@@ -493,27 +549,44 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
             if any(outcomes_by_step.get(dep) != "success" for dep in step.get("depends_on", [])):
                 offer(path, "skipped_dependency")
                 continue
-            match, unknown = guard_result(step.get("guard", []), path["facts"])
+            guard = step.get("guard", [])
+            match, unknown = guard_result(guard, path["facts"],
+                                          path["_guard_equalities"],
+                                          path["_guard_exclusions"])
             if match is False:
                 offer(path, "skipped_guard_false")
                 continue
             true_condition = None
+            equality_assumptions = None
             if match is None:
+                unknown_conditions = [condition for condition in guard
+                                      if condition["fact"] in unknown]
+                excluded_conjunction = {condition["fact"]: condition["equals"]
+                                        for condition in unknown_conditions}
                 offer(path, "skipped_guard_unknown",
-                      condition={"guard_step": step_id, "assumed": False,
-                                 "unknown_facts": unknown})
-                true_condition = {"guard_step": step_id, "assumed": True,
-                                  "unknown_facts": unknown}
+                      condition={"guard_step": step_id, "origin": "guard_assumption",
+                                 "assumed": False,
+                                 "unknown_facts": unknown,
+                                 "not_all_equal": unknown_conditions},
+                      excluded_conjunction=excluded_conjunction)
+                true_condition = {"guard_step": step_id,
+                                  "origin": "guard_assumption", "assumed": True,
+                                  "unknown_facts": unknown,
+                                  "all_equal": unknown_conditions}
+                equality_assumptions = excluded_conjunction
             if step["kind"] in WRITE_KINDS:
                 status = ("blocked_external_effect" if gates[step_id]["status"] == "blocked"
                           else "conditional_external_effect")
-                offer(path, status, condition=true_condition)
+                offer(path, status, condition=true_condition,
+                      equality_assumptions=equality_assumptions)
                 continue
             for outcome in step["outcomes"]:
                 offer(path, outcome["result"], outcome=outcome,
-                      condition=true_condition)
+                      condition=true_condition,
+                      equality_assumptions=equality_assumptions)
             if step["kind"] in OPEN_OUTCOME_KINDS:
-                offer(path, "unmodeled_outcome", condition=true_condition)
+                offer(path, "unmodeled_outcome", condition=true_condition,
+                      equality_assumptions=equality_assumptions)
         if produced_count > max_paths:
             omitted_lower_bound += produced_count - max_paths
             if first_truncated_step is None:
@@ -530,6 +603,8 @@ def forecast(contract: dict, observed_facts: dict, gates: dict, max_paths: int):
     for index, path in enumerate(paths, start=1):
         path["path_id"] = f"p{index:03d}"
         path["possible_end_state_only"] = True
+        path.pop("_guard_equalities")
+        path.pop("_guard_exclusions")
     return paths, {"max_paths": max_paths, "truncated": truncated,
                    "first_truncated_step": first_truncated_step,
                    "omitted_branches_at_least": omitted_lower_bound,

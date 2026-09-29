@@ -55,7 +55,13 @@ explicit `--workspace-root` argument, and paths must stay within that root.
 
 `pure` steps have one declared success outcome. `model` and `external_read`
 steps always add an `unmodeled_outcome` branch. Unknown guards branch into
-explicit true and false assumptions. Contract and start JSON files are limited
+explicit true and false assumptions. The true branch requires each missing
+equality; the false branch excludes their conjunction. These typed constraints
+apply to later guards on the same path. When a declared outcome sets a fact,
+the compiler removes its old value and preserves constraints on unchanged facts.
+The path's `conditions` retain the earlier assumption, while
+`predicted_end_facts` contains only extracted and declared-outcome facts.
+Contract and start JSON files are limited
 to 1 MB and 64 nesting levels each, and each step can declare at most 16
 outcomes. Path expansion defaults to 32 and can be set with `--max-paths` from
 1 to 128; omitted branches set

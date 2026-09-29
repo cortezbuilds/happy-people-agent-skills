@@ -198,6 +198,145 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(compiler.guard_result(typed_guard, {"count": {"value": 1}}),
                          (False, []))
 
+    def test_guard_assumptions_prune_impossible_later_paths(self):
+        contract = copy.deepcopy(json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8")))
+        first = contract["steps"][0]
+        first["guard"] = [{"fact": "missing_flag", "equals": True}]
+        first["outcomes"][0]["set"] = {}
+        second = copy.deepcopy(first)
+        second.update({"id": "check_again", "label": "Check the flag again",
+                       "guard": [{"fact": "missing_flag", "equals": True}]})
+        contract["steps"].append(second)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+            capped, _, _ = compiler.compile_bundle(path, SIMPLE_START, max_paths=1)
+        histories = [[item["forecast_status"] for item in branch["step_results"]]
+                     for branch in plan["predicted_paths"]]
+        self.assertEqual(histories, [["skipped_guard_unknown", "skipped_guard_false"],
+                                     ["success", "success"]])
+        self.assertEqual(capped["enumeration"]["omitted_branches_at_least"], 1)
+        self.assertEqual(capped["enumeration"]["first_truncated_step"], "check_note")
+        self.assertTrue(all("_guard_equalities" not in branch and
+                            "_guard_exclusions" not in branch
+                            for branch in plan["predicted_paths"]))
+
+        contract["steps"][1]["guard"][0]["equals"] = False
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+        self.assertFalse(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["success", "success"] for branch in plan["predicted_paths"]))
+
+        contract["steps"][1]["guard"][0]["equals"] = 1
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+        self.assertFalse(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["success", "success"] for branch in plan["predicted_paths"]))
+
+    def test_false_conjunctive_guard_and_later_state_change(self):
+        contract = copy.deepcopy(json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8")))
+        first = contract["steps"][0]
+        first["guard"] = [{"fact": "missing_x", "equals": True},
+                          {"fact": "missing_y", "equals": True}]
+        first["outcomes"][0]["set"] = {}
+        second = copy.deepcopy(first)
+        second.update({"id": "check_x", "label": "Check X",
+                       "guard": [{"fact": "missing_x", "equals": True}]})
+        third = copy.deepcopy(first)
+        third.update({"id": "check_y", "label": "Check Y",
+                      "guard": [{"fact": "missing_y", "equals": True}]})
+        contract["steps"].extend([second, third])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+        self.assertFalse(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["skipped_guard_unknown", "success", "success"]
+            for branch in plan["predicted_paths"]))
+        self.assertTrue(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["skipped_guard_unknown", "success", "skipped_guard_false"]
+            for branch in plan["predicted_paths"]))
+
+        contract["steps"] = contract["steps"][:2]
+        contract["steps"][0]["guard"] = [{"fact": "missing_x", "equals": True}]
+        contract["steps"][0]["outcomes"][0]["set"] = {"missing_x": False}
+        contract["steps"][1]["guard"] = [{"fact": "missing_x", "equals": False}]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+        self.assertTrue(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["success", "success"] for branch in plan["predicted_paths"]))
+
+        contract["steps"][0]["outcomes"][0]["set"] = {}
+        contract["steps"][1]["guard"] = []
+        contract["steps"][1]["outcomes"][0]["set"] = {"missing_x": True}
+        third = copy.deepcopy(contract["steps"][1])
+        third.update({"id": "check_after_set", "label": "Check after set",
+                      "guard": [{"fact": "missing_x", "equals": True}],
+                      "outcomes": [{"id": "done", "result": "success"}]})
+        contract["steps"].append(third)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, SIMPLE_START)
+        self.assertTrue(any(
+            [item["forecast_status"] for item in branch["step_results"]] ==
+            ["skipped_guard_unknown", "success", "success"]
+            for branch in plan["predicted_paths"]))
+
+    def test_duplicate_fact_in_one_guard_is_rejected(self):
+        contract = copy.deepcopy(json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8")))
+        contract["steps"][0]["guard"] = [
+            {"fact": "missing_x", "equals": True},
+            {"fact": "missing_x", "equals": False}]
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            with self.assertRaisesRegex(compiler.BundleError, "at most once"):
+                compiler.compile_bundle(path, SIMPLE_START)
+
+    def test_assignment_preserves_constraint_on_unchanged_fact(self):
+        contract = copy.deepcopy(json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8")))
+        first = contract["steps"][0]
+        first["guard"] = [{"fact": "missing_x", "equals": True},
+                          {"fact": "missing_y", "equals": True}]
+        first["outcomes"][0]["set"] = {}
+        second = copy.deepcopy(first)
+        second.update({"id": "assume_x", "label": "Assume X",
+                       "guard": [{"fact": "missing_x", "equals": True}]})
+        setter = copy.deepcopy(first)
+        setter.update({"id": "set_x", "label": "Set X", "guard": [],
+                       "outcomes": [{"id": "changed", "result": "success",
+                                     "set": {"missing_x": False}}]})
+        fourth = copy.deepcopy(first)
+        fourth.update({"id": "check_y", "label": "Check Y",
+                       "guard": [{"fact": "missing_y", "equals": True}]})
+        contract["steps"].extend([second, setter, fourth])
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            for cap in (4, 32):
+                with self.subTest(max_paths=cap):
+                    plan, _, _ = compiler.compile_bundle(path, SIMPLE_START,
+                                                         max_paths=cap)
+                    histories = [[item["forecast_status"]
+                                  for item in branch["step_results"]]
+                                 for branch in plan["predicted_paths"]]
+                    self.assertNotIn(["skipped_guard_unknown", "success",
+                                      "success", "success"], histories)
+                    self.assertFalse(plan["enumeration"]["truncated"])
+
     def test_nonfinite_numbers_are_rejected(self):
         self.assertFalse(compiler.scalar(float("inf")))
         with tempfile.TemporaryDirectory() as temporary:
