@@ -25,7 +25,15 @@ WARNINGS_SCHEMA = "agent-schematic/warnings-v1"
 SVG_SCHEMA = "agent-schematic/svg-v1"
 COMPILER_NAME = "agent-schematic/compile_bundle.py"
 MAX_JSON_BYTES = 1_000_000
+MAX_JSON_NESTING = 64
 MAX_OUTCOMES = 16
+MAX_EVIDENCE_FILES = 64
+MAX_EVIDENCE_BYTES = 8_000_000
+MAX_FACTS = 128
+MAX_APPROVALS = 128
+MAX_GUARD_CONDITIONS = 16
+MAX_OUTCOME_CHANGES = 16
+MAX_SCALAR_TEXT = 1000
 IDENT = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 KINDS = {"pure", "model", "external_read", "external_write", "irreversible"}
@@ -65,11 +73,14 @@ def load_json(path: Path):
     try:
         data = json.loads(raw, object_pairs_hook=reject_duplicates,
                           parse_constant=reject_constant)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        require(isinstance(data, dict), f"{path}: top-level JSON must be an object")
+        require_bounded_json_depth(data)
+        reject_nonfinite(data)
+        reject_surrogates(data)
+    except BundleError:
+        raise
+    except (ValueError, RecursionError) as exc:
         raise BundleError(f"invalid JSON in {path}: {exc}") from exc
-    require(isinstance(data, dict), f"{path}: top-level JSON must be an object")
-    reject_nonfinite(data)
-    reject_surrogates(data)
     return data, hashlib.sha256(raw).hexdigest()
 
 
@@ -82,6 +93,18 @@ def reject_nonfinite(value):
     elif isinstance(value, list):
         for item in value:
             reject_nonfinite(item)
+
+
+def require_bounded_json_depth(value) -> None:
+    pending = [(value, 0)]
+    while pending:
+        current, depth = pending.pop()
+        require(depth <= MAX_JSON_NESTING,
+                f"JSON nesting exceeds {MAX_JSON_NESTING} levels")
+        if isinstance(current, dict):
+            pending.extend((item, depth + 1) for item in current.values())
+        elif isinstance(current, list):
+            pending.extend((item, depth + 1) for item in current)
 
 
 def reject_surrogates(value):
@@ -98,7 +121,8 @@ def reject_surrogates(value):
 
 
 def scalar(value):
-    return (value is None or type(value) in (str, int, bool) or
+    return (value is None or type(value) in (int, bool) or
+            (type(value) is str and len(value) <= MAX_SCALAR_TEXT) or
             (type(value) is float and math.isfinite(value)))
 
 
@@ -131,8 +155,12 @@ def compiler_identity() -> dict:
 def extract_fact(spec: dict, raw: bytes, source_label: str):
     kind = spec.get("kind")
     if kind == "file_exists":
+        require(set(spec) == {"kind", "evidence_ref"},
+                "file_exists extractor has unexpected fields")
         return True
     if kind == "text_contains":
+        require(set(spec) == {"kind", "evidence_ref", "text"},
+                "text_contains extractor has unexpected fields")
         needle = spec.get("text")
         require(isinstance(needle, str) and 1 <= len(needle) <= 1000,
                 "text_contains needs a bounded exact string")
@@ -141,17 +169,22 @@ def extract_fact(spec: dict, raw: bytes, source_label: str):
         except UnicodeDecodeError as exc:
             raise BundleError(f"text_contains source is not UTF-8: {source_label}") from exc
     if kind == "json_path":
+        require(set(spec) == {"kind", "evidence_ref", "path"},
+                "json_path extractor has unexpected fields")
         path = spec.get("path")
         require(isinstance(path, list) and 1 <= len(path) <= 8 and
-                all(isinstance(key, str) and key for key in path),
+                all(isinstance(key, str) and 1 <= len(key) <= 128 for key in path),
                 "json_path needs one to eight object keys")
         try:
             value = json.loads(raw, object_pairs_hook=reject_duplicates,
                                parse_constant=lambda value: require(False, f"invalid JSON number: {value}"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise BundleError(f"json_path source is invalid JSON: {source_label}") from exc
-        reject_nonfinite(value)
-        reject_surrogates(value)
+            require_bounded_json_depth(value)
+            reject_nonfinite(value)
+            reject_surrogates(value)
+        except BundleError:
+            raise
+        except (ValueError, RecursionError) as exc:
+            raise BundleError(f"json_path source is invalid JSON: {source_label}: {exc}") from exc
         for key in path:
             require(isinstance(value, dict) and key in value,
                     f"json_path key {key!r} absent in {source_label}")
@@ -169,12 +202,18 @@ def validate_start(start: dict, start_path: Path, workspace_root: Path | None = 
     require(isinstance(evidence, dict), "observed evidence must be an object")
     require(isinstance(facts, dict), "observed facts must be an object")
     require(isinstance(approvals, list), "approvals must be a list")
+    require(len(evidence) <= MAX_EVIDENCE_FILES,
+            f"observed evidence exceeds {MAX_EVIDENCE_FILES} entries")
+    require(len(facts) <= MAX_FACTS, f"observed facts exceed {MAX_FACTS} entries")
+    require(len(approvals) <= MAX_APPROVALS,
+            f"approval claims exceed {MAX_APPROVALS} entries")
     bundle_root = start_path.parent.resolve()
     if workspace_root is not None:
         workspace_root = workspace_root.resolve()
         require(workspace_root.is_dir(), "workspace root must be a directory")
     checked_evidence = {}
     evidence_bytes = {}
+    total_evidence_bytes = 0
     for key, record in evidence.items():
         require(valid_id(key) and isinstance(record, dict), f"invalid evidence entry {key!r}")
         relative = record.get("path")
@@ -182,7 +221,9 @@ def validate_start(start: dict, start_path: Path, workspace_root: Path | None = 
         root_kind = record.get("root", "bundle")
         require(root_kind in ("bundle", "workspace"),
                 f"{key}: evidence root must be bundle or workspace")
-        require(isinstance(relative, str) and relative and not Path(relative).is_absolute(),
+        require(isinstance(relative, str) and relative and
+                all(ord(char) >= 32 for char in relative) and
+                not Path(relative).is_absolute(),
                 f"{key}: evidence path must be relative")
         require(isinstance(digest, str) and SHA256.fullmatch(digest) is not None,
                 f"{key}: evidence needs a SHA-256 pin")
@@ -193,9 +234,12 @@ def validate_start(start: dict, start_path: Path, workspace_root: Path | None = 
         source = (root / relative).resolve()
         require(source.is_relative_to(root) and source.is_file(),
                 f"{key}: evidence file missing or outside declared root")
-        require(source.stat().st_size <= 1_000_000, f"{key}: evidence file exceeds 1 MB")
-        raw = source.read_bytes()
+        with source.open("rb") as evidence_file:
+            raw = evidence_file.read(1_000_001)
         require(len(raw) <= 1_000_000, f"{key}: evidence file exceeds 1 MB")
+        total_evidence_bytes += len(raw)
+        require(total_evidence_bytes <= MAX_EVIDENCE_BYTES,
+                f"observed evidence exceeds {MAX_EVIDENCE_BYTES} aggregate bytes")
         actual = hashlib.sha256(raw).hexdigest()
         require(actual == digest, f"{key}: evidence SHA-256 mismatch")
         evidence_bytes[key] = raw
@@ -209,11 +253,13 @@ def validate_start(start: dict, start_path: Path, workspace_root: Path | None = 
         require("value" in record and scalar(record["value"]),
                 f"{key}: observed fact needs a scalar value")
         refs = record.get("evidence_refs")
-        require(isinstance(refs, list) and refs and
-                all(ref in checked_evidence for ref in refs),
+        require(isinstance(refs, list) and 1 <= len(refs) <= MAX_EVIDENCE_FILES and
+                all(valid_id(ref) and ref in checked_evidence for ref in refs),
                 f"{key}: observed fact needs pinned evidence references")
         extractor = record.get("extract")
-        require(isinstance(extractor, dict) and extractor.get("evidence_ref") in refs,
+        require(isinstance(extractor, dict) and
+                valid_id(extractor.get("evidence_ref")) and
+                extractor["evidence_ref"] in refs,
                 f"{key}: observed fact needs an extractor over referenced evidence")
         ref = extractor["evidence_ref"]
         extracted = extract_fact(extractor, evidence_bytes[ref], ref)
@@ -232,7 +278,8 @@ def validate_start(start: dict, start_path: Path, workspace_root: Path | None = 
         ref = record.get("evidence_ref")
         require(valid_id(step_id) and isinstance(target, str) and target and
                 isinstance(payload, str) and SHA256.fullmatch(payload) is not None and
-                issuer in ("user", "independent_gate") and ref in checked_evidence,
+                issuer in ("user", "independent_gate") and
+                valid_id(ref) and ref in checked_evidence,
                 "approval claim needs step, destination, payload pin, independent issuer, and pinned evidence")
         checked_approvals.append({"step_id": step_id, "destination": target,
                                   "payload_sha256": payload, "issuer": issuer,
@@ -257,23 +304,28 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
         step_id = step.get("id")
         require(valid_id(step_id) and step_id not in seen, "step IDs must be unique identifiers")
         kind = step.get("kind")
-        require(kind in KINDS, f"{step_id}: unknown step kind")
+        require(isinstance(kind, str) and kind in KINDS,
+                f"{step_id}: unknown step kind")
         label = step.get("label")
         require(isinstance(label, str) and 1 <= len(label) <= 58,
                 f"{step_id}: label must have 1 to 58 characters")
         require_svg_text(label, f"{step_id}: label")
         deps = step.get("depends_on", [])
-        require(isinstance(deps, list) and len(deps) == len(set(deps)) and
+        require(isinstance(deps, list) and len(deps) <= 20 and
+                all(valid_id(dep) for dep in deps) and
+                len(deps) == len(set(deps)) and
                 all(dep in seen for dep in deps),
                 f"{step_id}: dependencies must be unique earlier steps")
         guard = step.get("guard", [])
-        require(isinstance(guard, list), f"{step_id}: guard must be a list")
+        require(isinstance(guard, list) and len(guard) <= MAX_GUARD_CONDITIONS,
+                f"{step_id}: guard must have at most {MAX_GUARD_CONDITIONS} conditions")
         for condition in guard:
             require(isinstance(condition, dict) and valid_id(condition.get("fact")) and
                     "equals" in condition and scalar(condition["equals"]),
                     f"{step_id}: guard must use scalar fact equality")
         refs = step.get("evidence_refs", [])
-        require(isinstance(refs, list) and all(ref in evidence for ref in refs),
+        require(isinstance(refs, list) and len(refs) <= MAX_EVIDENCE_FILES and
+                all(valid_id(ref) and ref in evidence for ref in refs),
                 f"{step_id}: unknown evidence reference")
         outcomes = step.get("outcomes", [])
         require(isinstance(outcomes, list) and 1 <= len(outcomes) <= MAX_OUTCOMES,
@@ -286,7 +338,8 @@ def validate_contract(contract: dict, observed_facts: dict, evidence: dict):
             require(outcome.get("result") in ("success", "failure"),
                     f"{step_id}: outcome result must be success or failure")
             changes = outcome.get("set", {})
-            require(isinstance(changes, dict) and all(valid_id(key) and scalar(value)
+            require(isinstance(changes, dict) and len(changes) <= MAX_OUTCOME_CHANGES and
+                    all(valid_id(key) and scalar(value)
                                                        for key, value in changes.items()),
                     f"{step_id}: outcome changes must be scalar facts")
         if kind == "pure":
@@ -337,25 +390,28 @@ def gate_for_step(step: dict, approvals: list[dict], evidence: dict):
     valid_target = (isinstance(target, str) and 1 <= len(target) <= 200 and
                     bool(target.strip()) and all(ord(char) >= 32 for char in target))
     valid_payload = (isinstance(payload, str) and SHA256.fullmatch(payload) is not None and
-                     payload_ref in evidence and evidence[payload_ref]["sha256"] == payload)
+                     valid_id(payload_ref) and payload_ref in evidence and
+                     evidence[payload_ref]["sha256"] == payload)
+    valid_target_ref = valid_id(target_ref) and target_ref in evidence
+    valid_receipt = isinstance(receipt, str) and receipt in RECEIPT_KINDS
     matching = [record for record in approvals if record["step_id"] == step["id"] and
                 record["destination"] == target and record["payload_sha256"] == payload]
     problems = []
     if not valid_target or not valid_payload:
         problems.append("TARGET_OR_PAYLOAD_UNPINNED")
-    if target_ref not in evidence:
+    if not valid_target_ref:
         problems.append("TARGET_STATE_UNPINNED")
     if not matching:
         problems.append("INDEPENDENT_APPROVAL_MISSING")
     if not recheck:
         problems.append("RUNTIME_RECHECK_MISSING")
-    if receipt not in RECEIPT_KINDS:
+    if not valid_receipt:
         problems.append("RECEIPT_PLAN_MISSING")
     return {"status": "blocked" if problems else "conditional_on_runtime_gate",
             "problems": problems, "destination": target if valid_target else None,
             "payload_sha256": payload if valid_payload else None,
-            "receipt_kind": receipt if receipt in RECEIPT_KINDS else None,
-            "expected_target_evidence_ref": target_ref if target_ref in evidence else None,
+            "receipt_kind": receipt if valid_receipt else None,
+            "expected_target_evidence_ref": target_ref if valid_target_ref else None,
             "runtime_recheck_declared": recheck,
             "approval_claim_recorded": bool(matching),
             "execution": "not_run"}

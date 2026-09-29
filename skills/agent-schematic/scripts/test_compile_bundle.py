@@ -71,6 +71,82 @@ class CompilerTests(unittest.TestCase):
             with self.assertRaisesRegex(compiler.BundleError, "outside declared root"):
                 compiler.validate_start(start, CROSS_START, root)
 
+    def test_evidence_count_and_aggregate_bytes_are_bounded(self):
+        start = json.loads(CROSS_START.read_text(encoding="utf-8"))
+        for index in range(compiler.MAX_EVIDENCE_FILES + 1):
+            start["evidence"][f"extra_{index}"] = {
+                "path": "missing.bin", "sha256": "0" * 64}
+        with self.assertRaisesRegex(compiler.BundleError, "evidence exceeds 64 entries"):
+            compiler.validate_start(start, CROSS_START)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sample = root / "same.bin"
+            sample.write_bytes(b"12345678")
+            digest = hashlib.sha256(sample.read_bytes()).hexdigest()
+            start = {"schema": compiler.START_SCHEMA, "facts": {},
+                     "evidence": {"first": {"path": "same.bin", "sha256": digest},
+                                  "second": {"path": "same.bin", "sha256": digest}}}
+            with mock.patch.object(compiler, "MAX_EVIDENCE_BYTES", 10):
+                with self.assertRaisesRegex(compiler.BundleError, "aggregate bytes"):
+                    compiler.validate_start(start, root / "start.json")
+
+            sample.write_bytes(b"x" * 1_000_001)
+            start["evidence"] = {"first": {"path": "same.bin", "sha256": digest}}
+            with self.assertRaisesRegex(compiler.BundleError, "file exceeds 1 MB"):
+                compiler.validate_start(start, root / "start.json")
+
+    def test_malformed_references_report_validation_errors(self):
+        original = json.loads(CROSS_CONTRACT.read_text(encoding="utf-8"))
+        for field, value in (("kind", []), ("depends_on", [{}]),
+                             ("evidence_refs", [[]])):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as temporary:
+                contract = copy.deepcopy(original)
+                contract["steps"][0][field] = value
+                path = Path(temporary) / "contract.json"
+                output = Path(temporary) / "output"
+                path.write_text(json.dumps(contract), encoding="utf-8")
+                result = subprocess.run([sys.executable, str(HERE / "compile_bundle.py"),
+                                         str(path), str(CROSS_START), "--out", str(output)],
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("ERROR:", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertFalse(output.exists())
+
+        start = json.loads(CROSS_START.read_text(encoding="utf-8"))
+        start["facts"]["repo_alpha_identity"]["evidence_refs"] = [{}]
+        with self.assertRaises(compiler.BundleError):
+            compiler.validate_start(start, CROSS_START)
+        start = json.loads(CROSS_START.read_text(encoding="utf-8"))
+        start["evidence"]["alpha_snapshot"]["path"] = "bad\x00path"
+        with self.assertRaisesRegex(compiler.BundleError, "evidence path must be relative"):
+            compiler.validate_start(start, CROSS_START)
+        start = json.loads(CROSS_START.read_text(encoding="utf-8"))
+        start["approvals"] = [{"step_id": "publish_beta", "destination": "example.invalid",
+                               "payload_sha256": "0" * 64, "issuer": "user",
+                               "evidence_ref": []}]
+        with self.assertRaises(compiler.BundleError):
+            compiler.validate_start(start, CROSS_START)
+        start = json.loads(CROSS_START.read_text(encoding="utf-8"))
+        start["facts"]["repo_alpha_identity"]["extract"]["ignored_blob"] = "x" * 1000
+        with self.assertRaisesRegex(compiler.BundleError, "unexpected fields"):
+            compiler.validate_start(start, CROSS_START)
+
+        contract = copy.deepcopy(original)
+        effect = contract["steps"][-1]["effect"]
+        effect["payload_evidence_ref"] = []
+        effect["expected_target_evidence_ref"] = {}
+        effect["receipt_kind"] = []
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "contract.json"
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            plan, _, _ = compiler.compile_bundle(path, CROSS_START)
+        problems = plan["steps"][-1]["effect_gate"]["problems"]
+        self.assertIn("TARGET_OR_PAYLOAD_UNPINNED", problems)
+        self.assertIn("TARGET_STATE_UNPINNED", problems)
+        self.assertIn("RECEIPT_PLAN_MISSING", problems)
+
     def test_model_branch_is_open_and_public_write_is_blocked(self):
         plan, report, svg = compiler.compile_bundle(CROSS_CONTRACT, CROSS_START)
         self.assertIsNotNone(svg)
@@ -130,6 +206,37 @@ class CompilerTests(unittest.TestCase):
                             encoding="utf-8")
             with self.assertRaisesRegex(compiler.BundleError, "non-finite JSON number"):
                 compiler.load_json(path)
+
+    def test_json_parser_limits_return_controlled_errors(self):
+        nested = b'{"a":' + b'[' * 1100 + b'0' + b']' * 1100 + b'}'
+        large_integer = b'{"a":' + b'9' * 5000 + b'}'
+        extractor = {"kind": "json_path", "evidence_ref": "source", "path": ["a"]}
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            for raw in (nested, large_integer):
+                with self.subTest(input_size=len(raw)):
+                    path.write_bytes(raw)
+                    with self.assertRaisesRegex(compiler.BundleError,
+                                                "invalid JSON in|JSON nesting exceeds"):
+                        compiler.load_json(path)
+                    with self.assertRaisesRegex(compiler.BundleError,
+                                                "json_path source is invalid JSON|JSON nesting exceeds"):
+                        compiler.extract_fact(extractor, raw, "source")
+
+            contract = json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8"))
+            nested_value = 0
+            for _ in range(compiler.MAX_JSON_NESTING + 1):
+                nested_value = [nested_value]
+            contract["steps"][0]["outcomes"][0]["extra"] = nested_value
+            path.write_text(json.dumps(contract), encoding="utf-8")
+            output = Path(temporary) / "output"
+            result = subprocess.run([sys.executable, str(HERE / "compile_bundle.py"),
+                                     str(path), str(SIMPLE_START), "--out", str(output)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("JSON nesting exceeds", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertFalse(output.exists())
 
     def test_lone_surrogates_fail_before_any_artifact_is_written(self):
         contract = json.loads(SIMPLE_CONTRACT.read_text(encoding="utf-8"))
