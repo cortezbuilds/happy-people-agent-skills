@@ -1,0 +1,58 @@
+{
+  "schema": "agent-schematic/contract-v1",
+  "id": "synthetic_cross_repo_publication",
+  "title": "Synthetic cross-repository README update",
+  "objective": "Decide whether an explanatory diagram belongs in a second repository, then stop at its public-write gate.",
+  "visual": {
+    "relationship": "trust_boundary",
+    "reader_question": "Where does a public write require a fresh gate?"
+  },
+  "steps": [
+    {
+      "id": "compare_snapshots",
+      "label": "Compare two pinned repo snapshots",
+      "kind": "pure",
+      "depends_on": [],
+      "guard": [
+        {"fact": "repo_alpha_identity", "equals": "example.invalid/alpha"},
+        {"fact": "repo_beta_identity", "equals": "example.invalid/beta"}
+      ],
+      "evidence_refs": ["alpha_snapshot", "beta_snapshot"],
+      "outcomes": [
+        {"id": "compared", "result": "success", "set": {"snapshots_compared": true}}
+      ]
+    },
+    {
+      "id": "decide_visual",
+      "label": "Assess whether a diagram helps",
+      "kind": "model",
+      "depends_on": ["compare_snapshots"],
+      "guard": [{"fact": "snapshots_compared", "equals": true}],
+      "evidence_refs": ["alpha_snapshot", "beta_snapshot", "release_skill"],
+      "outcomes": [
+        {"id": "diagram_helpful", "result": "success", "set": {"visual_helpful": true}},
+        {"id": "prose_clearer", "result": "success", "set": {"visual_helpful": false}}
+      ]
+    },
+    {
+      "id": "publish_beta",
+      "label": "Publish change to public repo Beta",
+      "kind": "external_write",
+      "depends_on": ["decide_visual"],
+      "guard": [{"fact": "visual_helpful", "equals": true}],
+      "evidence_refs": ["beta_snapshot", "proposed_patch", "release_skill"],
+      "effect": {
+        "destination": "https://example.invalid/beta/README.md",
+        "expected_target_evidence_ref": "beta_snapshot",
+        "payload_evidence_ref": "proposed_patch",
+        "payload_sha256": "98c873f86c28981b457ffa33cf97cbb9f317db74c7cc3d72b13680b2d0c31893",
+        "runtime_recheck": true,
+        "receipt_kind": "public_readback"
+      },
+      "outcomes": [
+        {"id": "published", "result": "success", "set": {"public_readback_observed": true}},
+        {"id": "rejected", "result": "failure", "set": {"public_readback_observed": false}}
+      ]
+    }
+  ]
+}

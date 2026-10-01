@@ -1,0 +1,43 @@
+{
+  "schema": "agent-schematic/start-v1",
+  "evidence": {
+    "alpha_snapshot": {
+      "root": "bundle",
+      "path": "evidence/repo_alpha_snapshot.json",
+      "sha256": "bbe3129c1b6f1534ebe15ce4de77810cb53416b7999a9a2e41104fc40b426a96"
+    },
+    "beta_snapshot": {
+      "root": "bundle",
+      "path": "evidence/repo_beta_snapshot.json",
+      "sha256": "f6396b12f1567af850e81e574bbeff7e9e881e5a49fffa9fdebb3d560371dfd2"
+    },
+    "proposed_patch": {
+      "root": "bundle",
+      "path": "evidence/proposed_readme_patch.txt",
+      "sha256": "98c873f86c28981b457ffa33cf97cbb9f317db74c7cc3d72b13680b2d0c31893"
+    },
+    "release_skill": {
+      "root": "bundle",
+      "path": "evidence/release_skill_fixture.md",
+      "sha256": "b3814e25e51b9d6a6f0000a8c48d0c14da2a991edc3a26b09512ab94d46dce5e"
+    }
+  },
+  "facts": {
+    "repo_alpha_identity": {
+      "value": "example.invalid/alpha",
+      "evidence_refs": ["alpha_snapshot"],
+      "extract": {"kind": "json_path", "evidence_ref": "alpha_snapshot", "path": ["repository"]}
+    },
+    "repo_beta_identity": {
+      "value": "example.invalid/beta",
+      "evidence_refs": ["beta_snapshot"],
+      "extract": {"kind": "json_path", "evidence_ref": "beta_snapshot", "path": ["repository"]}
+    },
+    "release_skill_source_present": {
+      "value": true,
+      "evidence_refs": ["release_skill"],
+      "extract": {"kind": "text_contains", "evidence_ref": "release_skill", "text": "# Release Evidence"}
+    }
+  },
+  "approvals": []
+}
